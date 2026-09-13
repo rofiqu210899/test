@@ -227,16 +227,19 @@
                                                 <td><?= $nilai['ipaddress'] ?></td>
                                                 <td><?= $ket ?></td>
                                                 <td>
-                                                    <?php
-                                                    $logkamera = mysqli_fetch_array(mysqli_query($koneksi, "SELECT foto, waktu FROM log_kamera WHERE id_siswa='$siswa[id_siswa]' AND id_ujian='$nilai[id_ujian]' ORDER BY id_log DESC LIMIT 1"));
-                                                    if (!empty($logkamera['foto'])) {
-                                                        echo "<a href='javascript:void(0)' class='btn-view-kamera' data-foto='$homeurl/files/kamera/$logkamera[foto]' data-nama='" . htmlspecialchars($siswa['nama'], ENT_QUOTES) . "' data-waktu='$logkamera[waktu]'>
-                                                            <img src='$homeurl/files/kamera/$logkamera[foto]' style='width:46px;height:35px;object-fit:cover;border-radius:4px;border:2px solid #00a65a;cursor:pointer;' title='Snapshot: $logkamera[waktu] (Klik untuk perbesar)'/>
-                                                        </a>";
-                                                    } else {
-                                                        echo "<span class='text-muted' style='font-size:11px;'><i class='fa fa-camera'></i> -</span>";
-                                                    }
-                                                    ?>
+                                                    <div style='display:flex;align-items:center;gap:6px;'>
+                                                        <?php
+                                                        $logkamera = mysqli_fetch_array(mysqli_query($koneksi, "SELECT foto, waktu FROM log_kamera WHERE id_siswa='$siswa[id_siswa]' AND id_ujian='$nilai[id_ujian]' ORDER BY id_log DESC LIMIT 1"));
+                                                        if (!empty($logkamera['foto'])) {
+                                                            echo "<a href='javascript:void(0)' class='btn-view-kamera' data-foto='$homeurl/files/kamera/$logkamera[foto]' data-nama='" . htmlspecialchars($siswa['nama'], ENT_QUOTES) . "' data-waktu='$logkamera[waktu]'>
+                                                                <img src='$homeurl/files/kamera/$logkamera[foto]' style='width:38px;height:28px;object-fit:cover;border-radius:4px;border:2px solid #00a65a;cursor:pointer;' title='Snapshot: $logkamera[waktu] (Klik untuk perbesar)'/>
+                                                            </a>";
+                                                        }
+                                                        ?>
+                                                        <button type="button" class="btn btn-xs btn-danger btn-pantau-live" data-idsiswa="<?= $siswa['id_siswa'] ?>" data-idujian="<?= $nilai['id_ujian'] ?>" data-nama="<?= htmlspecialchars($siswa['nama'], ENT_QUOTES) ?>" title="Pantau Live CCTV Video Siswa Ini">
+                                                            <i class="fa fa-video"></i> Live CCTV
+                                                        </button>
+                                                    </div>
                                                 </td>
                                                 <td><?= $btn ?></td>
 
@@ -425,9 +428,179 @@
             }
         });
     });
+
+    // Kontrol Pemantauan Live CCTV Video Real-Time
+    var activeLiveSiswa = null;
+    var activeLiveUjian = null;
+    var cctvFrameInterval = null;
+    var cctvPeer = null;
+
+    $(document).on('click', '.btn-pantau-live', function(e) {
+        e.preventDefault();
+        var idSiswa = $(this).data('idsiswa');
+        var idUjian = $(this).data('idujian');
+        var namaSiswa = $(this).data('nama');
+
+        activeLiveSiswa = idSiswa;
+        activeLiveUjian = idUjian;
+
+        $('#cctv-nama-siswa').text(namaSiswa);
+        $('#cctv-loading-box').show();
+        $('#cctv-status-msg').text('Menghubungkan ke kamera siswa...');
+        $('#cctv-video-stream').hide();
+        $('#cctv-img-stream').hide();
+        $('#cctv-live-badge').hide();
+        $('#cctv-mode-badge').hide();
+
+        $('#modal-cctv-live').modal('show');
+
+        $.ajax({
+            url: '<?= $homeurl ?>/api_stream.php?action=start_watch',
+            type: 'POST',
+            data: { id_siswa: idSiswa, id_ujian: idUjian },
+            dataType: 'json',
+            success: function() {
+                startAdminWebRtc(idSiswa);
+                startFastFramePuller(idSiswa);
+            }
+        });
+    });
+
+    function startAdminWebRtc(idSiswa) {
+        try {
+            var rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+            cctvPeer = new RTCPeerConnection(rtcConfig);
+
+            cctvPeer.addTransceiver('video', { direction: 'recvonly' });
+
+            cctvPeer.ontrack = function(event) {
+                if (event.streams && event.streams[0]) {
+                    var vid = document.getElementById('cctv-video-stream');
+                    vid.srcObject = event.streams[0];
+                    vid.play();
+                    $('#cctv-loading-box').hide();
+                    $('#cctv-img-stream').hide();
+                    $('#cctv-video-stream').show();
+                    $('#cctv-live-badge').show();
+                    $('#cctv-mode-badge').text('WebRTC HD Live').show();
+                }
+            };
+
+            cctvPeer.createOffer().then(function(offer) {
+                return cctvPeer.setLocalDescription(offer);
+            }).then(function() {
+                $.ajax({
+                    type: 'POST',
+                    url: '<?= $homeurl ?>/api_stream.php?action=send_offer',
+                    data: { id_siswa: idSiswa, offer: JSON.stringify(cctvPeer.localDescription) }
+                });
+            });
+
+            var pollCount = 0;
+            var ansTimer = setInterval(function() {
+                if (!activeLiveSiswa || activeLiveSiswa != idSiswa) {
+                    clearInterval(ansTimer);
+                    return;
+                }
+                pollCount++;
+                if (pollCount > 15) {
+                    clearInterval(ansTimer);
+                    return;
+                }
+                $.ajax({
+                    url: '<?= $homeurl ?>/api_stream.php?action=get_answer&id_siswa=' + idSiswa,
+                    dataType: 'json',
+                    success: function(res) {
+                        if (res && res.answer && cctvPeer && cctvPeer.signalingState === 'have-local-offer') {
+                            clearInterval(ansTimer);
+                            try {
+                                var ans = JSON.parse(res.answer);
+                                cctvPeer.setRemoteDescription(new RTCSessionDescription(ans));
+                            } catch(e) {}
+                        }
+                    }
+                });
+            }, 1500);
+        } catch(err) {
+            console.warn('WebRTC admin init error:', err);
+        }
+    }
+
+    function startFastFramePuller(idSiswa) {
+        if (cctvFrameInterval) clearInterval(cctvFrameInterval);
+
+        function fetchFrame() {
+            if (!activeLiveSiswa || activeLiveSiswa != idSiswa) {
+                clearInterval(cctvFrameInterval);
+                return;
+            }
+            $.ajax({
+                url: '<?= $homeurl ?>/api_stream.php?action=get_frame&id_siswa=' + idSiswa,
+                dataType: 'json',
+                success: function(res) {
+                    if (res && res.status === 'ok') {
+                        var img = document.getElementById('cctv-img-stream');
+                        img.src = res.frame;
+                        if ($('#cctv-video-stream').is(':hidden')) {
+                            $('#cctv-loading-box').hide();
+                            $('#cctv-img-stream').show();
+                            $('#cctv-live-badge').show();
+                            $('#cctv-mode-badge').text('Live CCTV Motion').show();
+                        }
+                        var timePart = res.waktu ? (res.waktu.split(' ')[1] || res.waktu) : '--:--:--';
+                        $('#cctv-time-display').text(timePart);
+                    }
+                }
+            });
+        }
+
+        setTimeout(fetchFrame, 1500);
+        cctvFrameInterval = setInterval(fetchFrame, 1800);
+    }
+
+    function stopLiveCctv() {
+        if (activeLiveSiswa) {
+            $.ajax({
+                url: '<?= $homeurl ?>/api_stream.php?action=stop_watch&id_siswa=' + activeLiveSiswa,
+                type: 'POST'
+            });
+        }
+        activeLiveSiswa = null;
+        activeLiveUjian = null;
+        if (cctvFrameInterval) {
+            clearInterval(cctvFrameInterval);
+            cctvFrameInterval = null;
+        }
+        if (cctvPeer) {
+            cctvPeer.close();
+            cctvPeer = null;
+        }
+        var vid = document.getElementById('cctv-video-stream');
+        if (vid) {
+            vid.pause();
+            vid.srcObject = null;
+        }
+        $('#cctv-img-stream').attr('src', '').hide();
+        $('#cctv-video-stream').hide();
+        $('#cctv-loading-box').show();
+    }
+
+    $(document).on('click', '.btn-tutup-cctv', function() {
+        stopLiveCctv();
+    });
+
+    $('#modal-cctv-live').on('hidden.bs.modal', function() {
+        stopLiveCctv();
+    });
+
+    $('#btn-fullscreen-cctv').on('click', function() {
+        var elem = document.querySelector('#modal-cctv-live .modal-body');
+        if (elem.requestFullscreen) { elem.requestFullscreen(); }
+        else if (elem.webkitRequestFullscreen) { elem.webkitRequestFullscreen(); }
+    });
 </script>
 
-<!-- Modal Preview Kamera -->
+<!-- Modal Preview Foto Kamera -->
 <div class="modal fade" id="modal-preview-kamera" tabindex="-1" role="dialog">
     <div class="modal-dialog" role="document">
         <div class="modal-content">
@@ -444,6 +617,52 @@
             <div class="modal-footer">
                 <a id="cam-download-btn" href="" target="_blank" class="btn btn-default"><i class="fa fa-external-link"></i> Buka Ukuran Penuh</a>
                 <button type="button" class="btn btn-primary" data-dismiss="modal">Tutup</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Live CCTV Video Streaming -->
+<div class="modal fade" id="modal-cctv-live" tabindex="-1" role="dialog" data-backdrop="static">
+    <div class="modal-dialog modal-lg" role="document" style="max-width: 800px;">
+        <div class="modal-content" style="background:#181818; color:#fff; border-radius:8px; overflow:hidden; border: 1px solid #333;">
+            <div class="modal-header" style="background:#222; border-bottom:1px solid #333; display:flex; justify-content:space-between; align-items:center;">
+                <h4 class="modal-title" style="color:#fff; font-size:16px;">
+                    <span class="label label-danger" style="margin-right:8px;"><i class="fa fa-circle"></i> LIVE CCTV</span>
+                    <span id="cctv-nama-siswa" style="font-weight:bold;">Nama Siswa</span>
+                </h4>
+                <div>
+                    <button type="button" class="btn btn-sm btn-default" id="btn-fullscreen-cctv" title="Fullscreen"><i class="fa fa-arrows-alt"></i></button>
+                    <button type="button" class="close btn-tutup-cctv" data-dismiss="modal" style="color:#fff; opacity:0.8; font-size:24px; margin-left:15px;">&times;</button>
+                </div>
+            </div>
+            <div class="modal-body" style="padding:0; position:relative; background:#000; min-height:380px; display:flex; justify-content:center; align-items:center;">
+                <!-- Video Element for WebRTC -->
+                <video id="cctv-video-stream" autoplay playsinline style="width:100%; max-height:480px; object-fit:contain; display:none;"></video>
+                <!-- Image Element for Live Frame Stream Fallback -->
+                <img id="cctv-img-stream" src="" style="width:100%; max-height:480px; object-fit:contain; display:none;" />
+                
+                <!-- Loading & Connecting Spinner -->
+                <div id="cctv-loading-box" style="text-align:center; padding:40px;">
+                    <i class="fa fa-spinner fa-spin fa-3x" style="color:#00c0ef;"></i>
+                    <p style="margin-top:15px; color:#aaa; font-size:14px;" id="cctv-status-msg">Menghubungkan ke kamera siswa...</p>
+                </div>
+
+                <!-- Live Stream Overlays -->
+                <div style="position:absolute; top:12px; left:15px; pointer-events:none;">
+                    <span class="badge bg-red" id="cctv-live-badge" style="font-size:12px; padding:4px 8px; display:none;">
+                        <i class="fa fa-video"></i> LIVE STREAM
+                    </span>
+                    <span class="badge bg-green" id="cctv-mode-badge" style="font-size:11px; margin-left:5px; display:none;">Live CCTV</span>
+                </div>
+
+                <div style="position:absolute; bottom:12px; left:15px; color:#00ff00; font-family:monospace; font-size:12px; background:rgba(0,0,0,0.6); padding:2px 8px; border-radius:3px; pointer-events:none;">
+                    <i class="fa fa-clock-o"></i> <span id="cctv-time-display">--:--:--</span> | <span id="cctv-fps-display">CCTV Active</span>
+                </div>
+            </div>
+            <div class="modal-footer" style="background:#222; border-top:1px solid #333; display:flex; justify-content:space-between; align-items:center;">
+                <span class="text-muted" style="font-size:12px;"><i class="fa fa-info-circle"></i> Streaming real-time dari kamera siswa. Otomatis berhenti saat modal ditutup.</span>
+                <button type="button" class="btn btn-default btn-tutup-cctv" data-dismiss="modal">Tutup Pemantauan</button>
             </div>
         </div>
     </div>

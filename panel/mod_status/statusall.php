@@ -78,16 +78,19 @@ if ($pengawas['level'] == 'admin') {
                         <td><?= $nilai['ipaddress'] ?></td>
                         <td><?= $ket ?></td>
                         <td>
-                            <?php
-                            $logkamera = mysqli_fetch_array(mysqli_query($koneksi, "SELECT foto, waktu FROM log_kamera WHERE id_siswa='$siswa[id_siswa]' AND id_ujian='$nilai[id_ujian]' ORDER BY id_log DESC LIMIT 1"));
-                            if (!empty($logkamera['foto'])) {
-                                echo "<a href='javascript:void(0)' class='btn-view-kamera' data-foto='$homeurl/files/kamera/$logkamera[foto]' data-nama='" . htmlspecialchars($siswa['nama'], ENT_QUOTES) . "' data-waktu='$logkamera[waktu]'>
-                                    <img src='$homeurl/files/kamera/$logkamera[foto]' style='width:46px;height:35px;object-fit:cover;border-radius:4px;border:2px solid #00a65a;cursor:pointer;' title='Snapshot: $logkamera[waktu] (Klik untuk perbesar)'/>
-                                </a>";
-                            } else {
-                                echo "<span class='text-muted' style='font-size:11px;'><i class='fa fa-camera'></i> -</span>";
-                            }
-                            ?>
+                            <div style='display:flex;align-items:center;gap:6px;'>
+                                <?php
+                                $logkamera = mysqli_fetch_array(mysqli_query($koneksi, "SELECT foto, waktu FROM log_kamera WHERE id_siswa='$siswa[id_siswa]' AND id_ujian='$nilai[id_ujian]' ORDER BY id_log DESC LIMIT 1"));
+                                if (!empty($logkamera['foto'])) {
+                                    echo "<a href='javascript:void(0)' class='btn-view-kamera' data-foto='$homeurl/files/kamera/$logkamera[foto]' data-nama='" . htmlspecialchars($siswa['nama'], ENT_QUOTES) . "' data-waktu='$logkamera[waktu]'>
+                                        <img src='$homeurl/files/kamera/$logkamera[foto]' style='width:38px;height:28px;object-fit:cover;border-radius:4px;border:2px solid #00a65a;cursor:pointer;' title='Snapshot: $logkamera[waktu] (Klik untuk perbesar)'/>
+                                    </a>";
+                                }
+                                ?>
+                                <button type="button" class="btn btn-xs btn-danger btn-pantau-live" data-idsiswa="<?= $siswa['id_siswa'] ?>" data-idujian="<?= $nilai['id_ujian'] ?>" data-nama="<?= htmlspecialchars($siswa['nama'], ENT_QUOTES) ?>" title="Pantau Live CCTV Video Siswa Ini">
+                                    <i class="fa fa-video"></i> Live CCTV
+                                </button>
+                            </div>
                         </td>
                         <td><?= $btn ?></td>
 

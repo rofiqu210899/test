@@ -1455,13 +1455,16 @@ $tglsekarang = time();
             }
 
             <?php if (isset($setting['kamera']) && $setting['kamera'] == 1) : ?>
-            // Fitur Kamera Pengawas Siswa (Latar Belakang Tanpa Floating Widget)
+            // Fitur Kamera Pengawas Siswa (Latar Belakang & Live CCTV Streaming)
             (function initCameraProctoring() {
                 var proctorVideo = document.getElementById('cbt-proctor-video');
                 var proctorCanvas = document.getElementById('cbt-proctor-canvas');
                 var proctorStream = null;
                 var streamActive = false;
                 var lastCaptureTime = 0;
+                var liveCctvTimer = null;
+                var peerConn = null;
+                var isLiveStreaming = false;
 
                 function startCamera() {
                     if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
@@ -1491,7 +1494,6 @@ $tglsekarang = time();
 
                 function captureAndUpload(force) {
                     var now = Date.now();
-                    // Batasi capture minimal berselang 10 detik kecuali force
                     if (!force && (now - lastCaptureTime < 10000)) {
                         return;
                     }
@@ -1514,18 +1516,105 @@ $tglsekarang = time();
                                     id_siswa: <?= $id_siswa ?>,
                                     foto: dataUrl
                                 },
-                                dataType: 'json',
-                                success: function(res) {
-                                    // Berhasil tersimpan di latar belakang
-                                },
-                                error: function() {
-                                    // Silent catch agar ujian tetap berjalan lancar
-                                }
+                                dataType: 'json'
                             });
                         }
                     } catch (e) {
                         console.warn("Gagal mengambil snapshot:", e);
                     }
+                }
+
+                function pushLiveFrame() {
+                    if (!streamActive || !proctorVideo || !proctorCanvas) return;
+                    try {
+                        if (proctorVideo.videoWidth > 0 && proctorVideo.videoHeight > 0) {
+                            var ctx = proctorCanvas.getContext('2d');
+                            proctorCanvas.width = 400;
+                            proctorCanvas.height = 300;
+                            ctx.drawImage(proctorVideo, 0, 0, 400, 300);
+                            var dataUrl = proctorCanvas.toDataURL('image/jpeg', 0.5);
+
+                            $.ajax({
+                                type: 'POST',
+                                url: homeurl + '/api_stream.php?action=push_frame',
+                                data: {
+                                    id_ujian: <?= $ac ?>,
+                                    id_siswa: <?= $id_siswa ?>,
+                                    foto: dataUrl
+                                },
+                                dataType: 'json'
+                            });
+                        }
+                    } catch (e) {}
+                }
+
+                function handleWebRtcOffer() {
+                    $.ajax({
+                        url: homeurl + '/api_stream.php?action=get_offer&id_siswa=<?= $id_siswa ?>',
+                        dataType: 'json',
+                        success: function(res) {
+                            if (res && res.offer) {
+                                try {
+                                    var offerDesc = JSON.parse(res.offer);
+                                    if (!peerConn) {
+                                        var rtcConfig = {
+                                            iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+                                        };
+                                        peerConn = new RTCPeerConnection(rtcConfig);
+                                        if (proctorStream) {
+                                            proctorStream.getTracks().forEach(function(track) {
+                                                peerConn.addTrack(track, proctorStream);
+                                            });
+                                        }
+                                    }
+                                    peerConn.setRemoteDescription(new RTCSessionDescription(offerDesc)).then(function() {
+                                        return peerConn.createAnswer();
+                                    }).then(function(answer) {
+                                        return peerConn.setLocalDescription(answer);
+                                    }).then(function() {
+                                        $.ajax({
+                                            type: 'POST',
+                                            url: homeurl + '/api_stream.php?action=send_answer',
+                                            data: {
+                                                id_siswa: <?= $id_siswa ?>,
+                                                answer: JSON.stringify(peerConn.localDescription)
+                                            }
+                                        });
+                                    }).catch(function(e) {
+                                        console.warn('WebRTC error:', e);
+                                    });
+                                } catch(err) {}
+                            }
+                        }
+                    });
+                }
+
+                function pollLiveSignal() {
+                    $.ajax({
+                        url: homeurl + '/api_stream.php?action=check_signal&id_siswa=<?= $id_siswa ?>',
+                        dataType: 'json',
+                        success: function(res) {
+                            if (res && res.status === 'requested') {
+                                if (!isLiveStreaming) {
+                                    isLiveStreaming = true;
+                                    pushLiveFrame();
+                                    liveCctvTimer = setInterval(pushLiveFrame, 1500);
+                                }
+                                if (res.has_offer && !peerConn) {
+                                    handleWebRtcOffer();
+                                }
+                            } else {
+                                if (isLiveStreaming) {
+                                    isLiveStreaming = false;
+                                    if (liveCctvTimer) clearInterval(liveCctvTimer);
+                                    if (peerConn) {
+                                        peerConn.close();
+                                        peerConn = null;
+                                    }
+                                }
+                            }
+                        }
+                    });
                 }
 
                 window.captureCameraExam = captureAndUpload;
@@ -1536,6 +1625,8 @@ $tglsekarang = time();
                     setInterval(function() {
                         captureAndUpload(false);
                     }, 60000);
+                    // Polling permintaan pemantauan live CCTV setiap 2.5 detik
+                    setInterval(pollLiveSignal, 2500);
                 });
             })();
             <?php endif; ?>
