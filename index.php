@@ -830,6 +830,11 @@ $tglsekarang = time();
                         $jumsoal = $soalpg + $soalesai;
 
                     ?>
+                        <?php if (isset($setting['kamera']) && $setting['kamera'] == 1) : ?>
+                            <!-- Background Proctoring Camera Elements (Hidden) -->
+                            <video id="cbt-proctor-video" autoplay playsinline muted style="position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0;pointer-events:none;"></video>
+                            <canvas id="cbt-proctor-canvas" width="480" height="360" style="display:none;"></canvas>
+                        <?php endif; ?>
                         <div class='row'>
                             <div class="col-md-1"></div>
                             <div class='col-md-10' >
@@ -1375,6 +1380,9 @@ $tglsekarang = time();
                             $('#nomorsoal #badge' + idsoal).addClass('bg-green');
                             $('#nomorsoal #jawabtemp' + idsoal).html(jawabQ);
                             $('#ketjawab').load(window.location.href + ' #ketjawab');
+                            if (typeof window.captureCameraExam === 'function') {
+                                window.captureCameraExam(false);
+                            }
                         }
                     }
                 });
@@ -1401,6 +1409,9 @@ $tglsekarang = time();
                             $('#badge' + idsoal).removeClass('bg-yellow');
                             $('#badge' + idsoal).addClass('bg-green');
                             $('#ketjawab').load(window.location.href + ' #ketjawab');
+                            if (typeof window.captureCameraExam === 'function') {
+                                window.captureCameraExam(false);
+                            }
                         }
 
                     }
@@ -1442,6 +1453,92 @@ $tglsekarang = time();
                     $('#load-ragu input').removeAttr('checked');
                 }
             }
+
+            <?php if (isset($setting['kamera']) && $setting['kamera'] == 1) : ?>
+            // Fitur Kamera Pengawas Siswa (Latar Belakang Tanpa Floating Widget)
+            (function initCameraProctoring() {
+                var proctorVideo = document.getElementById('cbt-proctor-video');
+                var proctorCanvas = document.getElementById('cbt-proctor-canvas');
+                var proctorStream = null;
+                var streamActive = false;
+                var lastCaptureTime = 0;
+
+                function startCamera() {
+                    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                        navigator.mediaDevices.getUserMedia({
+                            video: {
+                                width: { ideal: 480 },
+                                height: { ideal: 360 },
+                                facingMode: 'user'
+                            },
+                            audio: false
+                        }).then(function(stream) {
+                            proctorStream = stream;
+                            if (proctorVideo) {
+                                proctorVideo.srcObject = stream;
+                                proctorVideo.play();
+                                streamActive = true;
+                                // Snapshot pertama setelah 3 detik
+                                setTimeout(function() {
+                                    captureAndUpload(true);
+                                }, 3000);
+                            }
+                        }).catch(function(err) {
+                            console.warn("Akses kamera tidak diizinkan atau tidak ditemukan:", err);
+                        });
+                    }
+                }
+
+                function captureAndUpload(force) {
+                    var now = Date.now();
+                    // Batasi capture minimal berselang 10 detik kecuali force
+                    if (!force && (now - lastCaptureTime < 10000)) {
+                        return;
+                    }
+                    if (!streamActive || !proctorVideo || !proctorCanvas) return;
+
+                    try {
+                        if (proctorVideo.videoWidth > 0 && proctorVideo.videoHeight > 0) {
+                            var ctx = proctorCanvas.getContext('2d');
+                            proctorCanvas.width = 480;
+                            proctorCanvas.height = 360;
+                            ctx.drawImage(proctorVideo, 0, 0, 480, 360);
+                            var dataUrl = proctorCanvas.toDataURL('image/jpeg', 0.65);
+                            lastCaptureTime = now;
+
+                            $.ajax({
+                                type: 'POST',
+                                url: homeurl + '/simpan_kamera.php',
+                                data: {
+                                    id_ujian: <?= $ac ?>,
+                                    id_siswa: <?= $id_siswa ?>,
+                                    foto: dataUrl
+                                },
+                                dataType: 'json',
+                                success: function(res) {
+                                    // Berhasil tersimpan di latar belakang
+                                },
+                                error: function() {
+                                    // Silent catch agar ujian tetap berjalan lancar
+                                }
+                            });
+                        }
+                    } catch (e) {
+                        console.warn("Gagal mengambil snapshot:", e);
+                    }
+                }
+
+                window.captureCameraExam = captureAndUpload;
+
+                $(document).ready(function() {
+                    startCamera();
+                    // Ambil snapshot otomatis secara berkala setiap 60 detik
+                    setInterval(function() {
+                        captureAndUpload(false);
+                    }, 60000);
+                });
+            })();
+            <?php endif; ?>
         </script>
     <?php endif; ?>
 </body>

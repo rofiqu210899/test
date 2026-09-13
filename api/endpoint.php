@@ -116,33 +116,95 @@ function parse_questions($content, $cfg)
         return $result;
     }
 
-    // ============ STRATEGI B: kartu soal urutan ============
+    // ============ STRATEGI B: kartu soal urutan / bernomor ============
     // Langkah 1: Cari posisi KUNCI → potong di situ
     $kunciIdx = null;
-    $kunciList = [];
+    $kunciMap = [];
     foreach ($clean as $k => $l) {
-        if (preg_match('/^KUNCI$/i', trim($l))) {
+        if (preg_match('/^KUNCI/i', trim($l))) {
             $kunciIdx = $k;
             break;
         }
     }
-    // Ambil kunci jawaban (huruf tunggal A-E setelah baris KUNCI)
+    // Ambil kunci jawaban (format berurutan A-E ATAU pasangan angka+huruf: 1 B 2 A ...)
     if ($kunciIdx !== null) {
-        for ($ki = $kunciIdx + 1; $ki < count($clean); $ki++) {
-            $kt = trim($clean[$ki]);
-            if (preg_match('/^[A-Ea-e]$/', $kt)) {
-                $kunciList[] = strtoupper($kt);
+        $kunciTail = array_slice($clean, $kunciIdx + 1);
+        $kunciText = implode(' ', $kunciTail);
+        if (preg_match_all('/(?:No\.?\s*)?(\d+)[\.\s:\-\)]+([A-Ea-e])\b/i', $kunciText, $km)) {
+            foreach ($km[1] as $ki => $num) {
+                $kunciMap[(int)$num] = strtoupper($km[2][$ki]);
+            }
+        } else {
+            $kSeq = 1;
+            foreach ($kunciTail as $kt) {
+                $kt = trim($kt);
+                if (preg_match('/^[A-Ea-e]$/', $kt)) {
+                    $kunciMap[$kSeq] = strtoupper($kt);
+                    $kSeq++;
+                }
             }
         }
-        // Ambil baris SEBELUM KUNCI saja utk soal+opsi
         $soalLines = array_slice($clean, 0, $kunciIdx);
     } else {
         $soalLines = $clean;
     }
 
-    // Langkah 2: Bersihkan baris sampah dari $soalLines
-    // - Hapus baris instruksi "Soal berikut untuk nomor..." + baris [IMG] setelahnya
-    // - Hapus baris [IMG] mandiri (lampirkan ke soal terakhir)
+    // Langkah 2: Cek apakah format soal bernomor eksplisit (misal: "1. Soal...", "2. Soal...")
+    $numberedCount = 0;
+    foreach ($soalLines as $sl) {
+        if (preg_match('/^\d+[\.\)]\s+/', trim($sl))) {
+            $numberedCount++;
+        }
+    }
+
+    if ($numberedCount >= 3) {
+        $result = [];
+        $currentQ = null;
+        foreach ($soalLines as $sl) {
+            $t = trim($sl);
+            $is_new_q = false;
+            $qNum = 0;
+            $qTextRem = '';
+            if (preg_match('/^(\d+)[\.\)]\s*(.*)$/', $t, $mn)) {
+                $candNum = (int)$mn[1];
+                $expectedNum = $currentQ ? ($currentQ['num'] + 1) : 1;
+                if ($candNum === $expectedNum || ($currentQ && $candNum > $currentQ['num'] && $candNum <= $currentQ['num'] + 2)) {
+                    $is_new_q = true;
+                    $qNum = $candNum;
+                    $qTextRem = $mn[2];
+                }
+            }
+
+            if ($is_new_q) {
+                if ($currentQ) {
+                    $result[] = $currentQ;
+                }
+                $currentQ = [
+                    'num' => $qNum,
+                    'question' => $qTextRem,
+                    'option' => [],
+                    'correct' => $kunciMap[$qNum] ?? '',
+                    'option_count' => 0,
+                ];
+            } elseif (preg_match('/^([A-Ea-e])[\.\)]\s*(.*)$/', $t, $mo) && $currentQ) {
+                $currentQ['option'][] = $mo[2];
+                $currentQ['option_count'] = count($currentQ['option']);
+            } elseif ($currentQ) {
+                if (empty($currentQ['option'])) {
+                    $currentQ['question'] .= '<br>' . $t;
+                } else {
+                    $lastIdx = count($currentQ['option']) - 1;
+                    $currentQ['option'][$lastIdx] .= ' ' . $t;
+                }
+            }
+        }
+        if ($currentQ) {
+            $result[] = $currentQ;
+        }
+        return $result;
+    }
+
+    // Langkah 3: Format kartu soal urutan klasik (5 baris = 1 soal)
     $filtered = [];
     $skipNext = false;
     $sharedImg = null;
@@ -162,7 +224,6 @@ function parse_questions($content, $cfg)
             continue;
         }
         if (strpos($t, '[IMG:') !== false) {
-            // Lampirkan ke soal terakhir
             if (count($filtered) > 0) {
                 $filtered[count($filtered) - 1] .= ' ' . $t;
             }
@@ -171,27 +232,23 @@ function parse_questions($content, $cfg)
         $filtered[] = $t;
     }
 
-    // Langkah 3: Kelompokkan 5 baris = 1 soal (soal + 4 opsi)
-    // Baris pertama = header/judul → skip jika jumlah baris bukan kelipatan 5
     $totalLines = count($filtered);
     $remainder = $totalLines % 5;
     $offset = 0;
     if ($remainder !== 0 && $remainder <= 1) {
-        // Header 1 baris → skip baris pertama
         $offset = $remainder;
     }
     $result = [];
     $soalNum = 1;
     for ($i = $offset; $i + 4 < count($filtered); $i += 5) {
         $qText = $filtered[$i];
-        // Lampirkan shared image jika ini soal 8 (indeks ke-7 dari 0-based)
         if ($sharedImg !== null && in_array($soalNum, $sharedNums)) {
             $qText .= ' ' . $sharedImg;
         }
         $result[] = [
             'question' => $qText,
             'option' => [$filtered[$i+1], $filtered[$i+2], $filtered[$i+3], $filtered[$i+4]],
-            'correct' => isset($kunciList[$soalNum - 1]) ? $kunciList[$soalNum - 1] : '',
+            'correct' => $kunciMap[$soalNum] ?? '',
             'option_count' => 4,
         ];
         $soalNum++;
@@ -269,7 +326,9 @@ function ensure_mapel($koneksi, $nama, $guru = '', $kelas = '', $level = '')
     }
     // Kolom NOT NULL wajib diisi: kode,idpk,idguru,nama,jml_soal,jml_esai,
     // tampil_pg,tampil_esai,bobot_pg,bobot_esai,level,opsi,kelas,status
-    $kode  = 'MAPEL';
+    $lvl = $level !== '' ? $level : '7';
+    $cleanKode = strtoupper(substr(preg_replace('/[^A-Za-z0-9]/', '', $nama), 0, 5));
+    $kode = $cleanKode . ($lvl !== '' ? $lvl : '');
     $idpk  = 'a:1:{i:0;s:5:"semua";}'; // paket "semua" (compat Candy CBT)
     $idguru = $guru !== '' ? $guru : '0';
     $jml_soal = 0;
@@ -278,7 +337,6 @@ function ensure_mapel($koneksi, $nama, $guru = '', $kelas = '', $level = '')
     $tampil_esai = 0;
     $bobot_pg = 0;
     $bobot_esai = 0;
-    $lvl = $level !== '' ? $level : 'put';
     $opsi = 4; // default 4 opsi; akan disetel dari file bila ada
     $kelas_arr = $kelas !== '' ? $kelas : 'a:1:{i:0;s:5:"semua";}';
     $status = '1';
@@ -315,7 +373,8 @@ switch ($action) {
             api_fail('Tidak ada file terkirim. Field name: "file".', 400);
         }
         $mapelName = $_POST['mapel'] ?? '';
-        $id_mapel = ensure_mapel($koneksi, $mapelName);
+        $levelParam = $_POST['level'] ?? '';
+        $id_mapel = ensure_mapel($koneksi, $mapelName, '', '', $levelParam);
         $file = $_FILES['file'];
 
         // Cek ekstensi .docx (word)
@@ -350,6 +409,7 @@ switch ($action) {
             api_fail('Struktur word/document.xml tidak ditemukan.', 400);
         }
         $content = file_get_contents($docXml);
+        $content = str_replace(['<w:br/>', '<w:br />', '<w:br>'], "\n", $content);
         $content = str_replace('</w:p>', "\n", $content); // pertahankan pemisah paragraf
         $content = htmlentities(strip_tags($content, '<a:blip>'));
 
@@ -370,9 +430,53 @@ switch ($action) {
         }
 
         $inserted = insert_questions($koneksi, $id_mapel, $questions);
+        $totalQ = (int) $inserted;
+        mysqli_query($koneksi, "UPDATE mapel SET jml_soal = $totalQ, tampil_pg = $totalQ, bobot_pg = 100 WHERE id_mapel = $id_mapel");
+
         api_json([
             'status' => 'success',
             'message' => "Berhasil import $inserted soal.",
+            'mapel' => $mapelName,
+            'id_mapel' => $id_mapel,
+            'total_deteksi' => count($questions),
+            'total_insert' => $inserted,
+        ]);
+
+    // ---- INPUT LANGSUNG DATA SOAL VIA JSON ----
+    case 'import_json':
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            api_fail('Gunakan method POST.', 405);
+        }
+        $raw = file_get_contents('php://input');
+        $body = json_decode($raw, true);
+        if (!$body || empty($body['questions'])) {
+            api_fail('Payload JSON tidak valid atau field "questions" kosong.', 400);
+        }
+        $mapelName = trim($body['mapel'] ?? '');
+        if ($mapelName === '') {
+            api_fail('Field "mapel" wajib diisi.', 400);
+        }
+        $levelParam = trim($body['level'] ?? '');
+        $id_mapel = ensure_mapel($koneksi, $mapelName, '', '', $levelParam);
+
+        $questions = [];
+        foreach ($body['questions'] as $q) {
+            $opts = $q['option'] ?? ($q['options'] ?? []);
+            $questions[] = [
+                'question' => $q['question'] ?? '',
+                'option' => $opts,
+                'correct' => strtoupper(trim($q['correct'] ?? ($q['jawaban'] ?? ''))),
+                'option_count' => count($opts),
+            ];
+        }
+
+        $inserted = insert_questions($koneksi, $id_mapel, $questions);
+        $totalQ = (int) $inserted;
+        mysqli_query($koneksi, "UPDATE mapel SET jml_soal = $totalQ, tampil_pg = $totalQ, bobot_pg = 100 WHERE id_mapel = $id_mapel");
+
+        api_json([
+            'status' => 'success',
+            'message' => "Berhasil import $inserted soal via JSON.",
             'mapel' => $mapelName,
             'id_mapel' => $id_mapel,
             'total_deteksi' => count($questions),

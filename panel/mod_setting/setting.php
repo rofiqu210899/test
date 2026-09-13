@@ -87,6 +87,23 @@ $setting['header'] = str_replace('<br />', '', $setting['header']);
                                         </div>
                                     </div>
                                     <div class='form-group'>
+                                        <div class='row'>
+                                            <div class='col-md-12'>
+                                                <label><i class='fa fa-camera'></i> Kamera Pengawas Ujian (Webcam Siswa)</label>
+                                                <div style='padding: 10px; background: #f9f9f9; border-radius: 4px; border: 1px solid #e1e1e1;'>
+                                                    <label class='radio-inline' style='font-weight: normal; margin-right: 25px;'>
+                                                        <input type='radio' name='kamera' value='1' <?= (isset($setting['kamera']) && $setting['kamera'] == 1) ? 'checked' : '' ?>>
+                                                        <span class='label label-success' style='font-size: 11px; padding: 4px 8px;'><i class='fa fa-check'></i> AKTIF (ON)</span> &nbsp; Kamera siswa aktif merekam snapshot saat ujian
+                                                    </label>
+                                                    <label class='radio-inline' style='font-weight: normal;'>
+                                                        <input type='radio' name='kamera' value='0' <?= (empty($setting['kamera']) || $setting['kamera'] == 0) ? 'checked' : '' ?>>
+                                                        <span class='label label-danger' style='font-size: 11px; padding: 4px 8px;'><i class='fa fa-times'></i> NONAKTIF (OFF)</span> &nbsp; Siswa mengerjakan ujian tanpa kamera
+                                                    </label>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class='form-group'>
                                         <label>Kepala Sekolah</label>
                                         <input type='text' name='kepsek' value="<?= $setting['kepsek'] ?>" class='form-control' />
                                     </div>

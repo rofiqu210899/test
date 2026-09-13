@@ -130,6 +130,13 @@
                 <div class='box-header with-border'>
                     <h3 class='box-title'><i class="fas fa-user-friends    "></i> Status Peserta</h3>
                     <div class='box-tools pull-right '>
+                        <?php
+                        $qsetting = mysqli_fetch_array(mysqli_query($koneksi, "SELECT kamera FROM setting WHERE id_setting='1'"));
+                        $isKamera = (isset($qsetting['kamera']) && $qsetting['kamera'] == 1);
+                        ?>
+                        <button type="button" class="btn <?= $isKamera ? 'btn-success' : 'btn-default' ?>" id="btn-toggle-kamera" data-status="<?= $isKamera ? '1' : '0' ?>" title="Kontrol Kamera Pengawas Siswa">
+                            <i class="fa <?= $isKamera ? 'fa-video' : 'fa-video-slash' ?>"></i> Kamera: <b id="lbl-kamera-status"><?= $isKamera ? 'ON' : 'OFF' ?></b>
+                        </button>
                         <button type="button" class="btn btn-warning" id="btnselesai"><i class="fas fa-upload    "></i> Selesai Semua</button>
                         <button type="button" class="btn btn-primary" id="btnfull"><i class="fa fa-arrows-alt"></i> FullScreen</button>
                         <button type="button" class="btn btn-primary" id="closefull"><i class="fa fa-times"></i> Close</button>
@@ -172,6 +179,7 @@
                                         <th>Nilai</th>
                                         <th>IP Address</th>
                                         <th>Status</th>
+                                        <th>Kamera</th>
                                         <th>Aksi</th>
                                     </tr>
                                 </thead>
@@ -218,6 +226,18 @@
                                                 <td><?= $skor ?></td>
                                                 <td><?= $nilai['ipaddress'] ?></td>
                                                 <td><?= $ket ?></td>
+                                                <td>
+                                                    <?php
+                                                    $logkamera = mysqli_fetch_array(mysqli_query($koneksi, "SELECT foto, waktu FROM log_kamera WHERE id_siswa='$siswa[id_siswa]' AND id_ujian='$nilai[id_ujian]' ORDER BY id_log DESC LIMIT 1"));
+                                                    if (!empty($logkamera['foto'])) {
+                                                        echo "<a href='javascript:void(0)' class='btn-view-kamera' data-foto='$homeurl/files/kamera/$logkamera[foto]' data-nama='" . htmlspecialchars($siswa['nama'], ENT_QUOTES) . "' data-waktu='$logkamera[waktu]'>
+                                                            <img src='$homeurl/files/kamera/$logkamera[foto]' style='width:46px;height:35px;object-fit:cover;border-radius:4px;border:2px solid #00a65a;cursor:pointer;' title='Snapshot: $logkamera[waktu] (Klik untuk perbesar)'/>
+                                                        </a>";
+                                                    } else {
+                                                        echo "<span class='text-muted' style='font-size:11px;'><i class='fa fa-camera'></i> -</span>";
+                                                    }
+                                                    ?>
+                                                </td>
                                                 <td><?= $btn ?></td>
 
                                             </tr>
@@ -361,4 +381,70 @@
             }
         })
     });
+
+    $(document).on('click', '.btn-view-kamera', function(e) {
+        e.preventDefault();
+        var foto = $(this).data('foto');
+        var nama = $(this).data('nama');
+        var waktu = $(this).data('waktu');
+        $('#cam-nama-siswa').text(nama);
+        $('#cam-waktu').text(waktu);
+        $('#cam-img-preview').attr('src', foto);
+        $('#cam-download-btn').attr('href', foto);
+        $('#modal-preview-kamera').modal('show');
+    });
+
+    $(document).on('click', '#btn-toggle-kamera', function() {
+        var btn = $(this);
+        var current = btn.data('status');
+        var newStatus = (current == '1') ? '0' : '1';
+
+        $.ajax({
+            url: 'mod_status/toggle_kamera.php',
+            type: 'POST',
+            data: { status: newStatus },
+            dataType: 'json',
+            success: function(res) {
+                if (res.status == 'ok') {
+                    btn.data('status', res.kamera);
+                    if (res.kamera == 1) {
+                        btn.removeClass('btn-default').addClass('btn-success');
+                        btn.html('<i class="fa fa-video"></i> Kamera: <b id="lbl-kamera-status">ON</b>');
+                        toastr.success('Kamera pengawas siswa telah diaktifkan (ON)');
+                    } else {
+                        btn.removeClass('btn-success').addClass('btn-default');
+                        btn.html('<i class="fa fa-video-slash"></i> Kamera: <b id="lbl-kamera-status">OFF</b>');
+                        toastr.info('Kamera pengawas siswa telah dinonaktifkan (OFF)');
+                    }
+                } else {
+                    swal('Error', res.message, 'error');
+                }
+            },
+            error: function() {
+                swal('Error', 'Gagal mengubah status kamera', 'error');
+            }
+        });
+    });
 </script>
+
+<!-- Modal Preview Kamera -->
+<div class="modal fade" id="modal-preview-kamera" tabindex="-1" role="dialog">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header bg-primary">
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                <h4 class="modal-title"><i class="fa fa-camera"></i> Snapshot Pengawasan Siswa: <span id="cam-nama-siswa"></span></h4>
+            </div>
+            <div class="modal-body text-center" style="background:#1e1e1e; padding: 20px;">
+                <img id="cam-img-preview" src="" style="max-width:100%;max-height:450px;border-radius:6px;box-shadow:0 4px 15px rgba(0,0,0,0.5);border:2px solid #555;"/>
+                <div style="margin-top:12px;color:#eee;font-size:13px;">
+                    <i class="fa fa-clock-o"></i> Waktu Pengambilan: <b id="cam-waktu"></b>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <a id="cam-download-btn" href="" target="_blank" class="btn btn-default"><i class="fa fa-external-link"></i> Buka Ukuran Penuh</a>
+                <button type="button" class="btn btn-primary" data-dismiss="modal">Tutup</button>
+            </div>
+        </div>
+    </div>
+</div>

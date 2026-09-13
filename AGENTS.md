@@ -94,9 +94,22 @@ C:\laragon\www\test\
   - Authentication checks `username` (or NIS) and `password` directly.
 
 ### 4. Database Queries
-- Procedural `mysqli` connection instance variable is `$koneksi`.
 - CRUD helper functions from `functions.crud.php` can be used:
   - `fetch($koneksi, $table, $where_array)`
   - `insert($koneksi, $table, $data_array)`
   - `update($koneksi, $table, $data_array, $where_array)`
   - `delete($koneksi, $table, $where_array)`
+
+---
+
+## 5. API Endpoint for AI Exam Import
+
+- **Target URL**: `https://test.smpblokagung.com/api/endpoint.php` (or `http://localhost/test/api/endpoint.php` on local).
+- **Authentication Header**: `X-API-KEY: zEa-2026-CBT-LOCAL-v2-secret-9f3a1c` (defined in `api/api_key.php`).
+- **Actions**:
+  - `?action=import_word`: POST (multipart/form-data) with fields `file` (Word `.docx`) and `mapel` (e.g. `INFORMATIKA`). Automatically parses questions, choices (A-E), images, and answer key.
+  - `?action=get_soal&id_mapel={id}`: GET list of questions.
+  - `?action=delete_soal`: POST with field `id_mapel`.
+  - `?action=list_tables`: GET database tables.
+- **Workflow for user requests like "import soal ... dari file D:\...":**
+  - AI can read the local file path directly from Windows, and POST the file to `https://test.smpblokagung.com/api/endpoint.php?action=import_word`.

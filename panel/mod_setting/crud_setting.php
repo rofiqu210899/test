@@ -24,7 +24,8 @@ if ($pg == 'setting_app') {
         'email' => $_POST['email'],
         'header' => $header,
         'ip_server' => $_POST['ipserver'],
-        'waktu' => $_POST['waktu']
+        'waktu' => $_POST['waktu'],
+        'kamera' => isset($_POST['kamera']) ? intval($_POST['kamera']) : 0
     ];
     $exec = update($koneksi, 'setting', $data, ['id_setting' => 1]);
     if ($exec) {
