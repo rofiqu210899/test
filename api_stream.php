@@ -130,7 +130,7 @@ if ($action == 'get_frame') {
     $row = mysqli_fetch_assoc($q);
     if ($row && !empty($row['live_frame'])) {
         $diff = time() - strtotime($row['updated_at']);
-        $frameUrl = $homeurl . '/files/kamera_live/' . $row['live_frame'] . '?t=' . time();
+        $frameUrl = $homeurl . '/files/kamera_live/' . $row['live_frame'] . '?t=' . round(microtime(true) * 1000);
         echo json_encode([
             'status'    => 'ok',
             'frame'     => $frameUrl,

@@ -832,7 +832,7 @@ $tglsekarang = time();
                     ?>
                         <?php if (isset($setting['kamera']) && $setting['kamera'] == 1) : ?>
                             <!-- Background Proctoring Camera Elements (Hidden) -->
-                            <video id="cbt-proctor-video" autoplay playsinline muted style="position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0;pointer-events:none;"></video>
+                            <video id="cbt-proctor-video" autoplay playsinline muted style="position:fixed;bottom:0;right:0;width:320px;height:240px;opacity:0.001;pointer-events:none;z-index:-1;"></video>
                             <canvas id="cbt-proctor-canvas" width="480" height="360" style="display:none;"></canvas>
                         <?php endif; ?>
                         <div class='row'>
@@ -1598,7 +1598,7 @@ $tglsekarang = time();
                                 if (!isLiveStreaming) {
                                     isLiveStreaming = true;
                                     pushLiveFrame();
-                                    liveCctvTimer = setInterval(pushLiveFrame, 1500);
+                                    liveCctvTimer = setInterval(pushLiveFrame, 1000);
                                 }
                                 if (res.has_offer && !peerConn) {
                                     handleWebRtcOffer();

@@ -477,12 +477,19 @@
                 if (event.streams && event.streams[0]) {
                     var vid = document.getElementById('cctv-video-stream');
                     vid.srcObject = event.streams[0];
-                    vid.play();
-                    $('#cctv-loading-box').hide();
-                    $('#cctv-img-stream').hide();
-                    $('#cctv-video-stream').show();
-                    $('#cctv-live-badge').show();
-                    $('#cctv-mode-badge').text('WebRTC HD Live').show();
+                    vid.play().catch(function(){});
+                    // Hanya alihkan ke video jika video benar-benar merender frame (bukan hitam)
+                    vid.onplaying = function() {
+                        setTimeout(function() {
+                            if (vid.videoWidth > 0 && !vid.paused) {
+                                $('#cctv-loading-box').hide();
+                                $('#cctv-img-stream').hide();
+                                $('#cctv-video-stream').show();
+                                $('#cctv-live-badge').show();
+                                $('#cctv-mode-badge').text('WebRTC HD Live').show();
+                            }
+                        }, 500);
+                    };
                 }
             };
 
@@ -540,13 +547,17 @@
                 success: function(res) {
                     if (res && res.status === 'ok') {
                         var img = document.getElementById('cctv-img-stream');
-                        img.src = res.frame;
-                        if ($('#cctv-video-stream').is(':hidden')) {
-                            $('#cctv-loading-box').hide();
-                            $('#cctv-img-stream').show();
-                            $('#cctv-live-badge').show();
-                            $('#cctv-mode-badge').text('Live CCTV Motion').show();
-                        }
+                        var preloader = new Image();
+                        preloader.onload = function() {
+                            img.src = preloader.src;
+                            if ($('#cctv-video-stream').is(':hidden')) {
+                                $('#cctv-loading-box').hide();
+                                $('#cctv-img-stream').show();
+                                $('#cctv-live-badge').show();
+                                $('#cctv-mode-badge').text('Live CCTV Streaming').show();
+                            }
+                        };
+                        preloader.src = res.frame;
                         var timePart = res.waktu ? (res.waktu.split(' ')[1] || res.waktu) : '--:--:--';
                         $('#cctv-time-display').text(timePart);
                     }
@@ -554,8 +565,8 @@
             });
         }
 
-        setTimeout(fetchFrame, 1500);
-        cctvFrameInterval = setInterval(fetchFrame, 1800);
+        setTimeout(fetchFrame, 300);
+        cctvFrameInterval = setInterval(fetchFrame, 1000);
     }
 
     function stopLiveCctv() {
