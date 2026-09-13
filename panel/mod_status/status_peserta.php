@@ -433,7 +433,17 @@
     var activeLiveSiswa = null;
     var activeLiveUjian = null;
     var cctvFrameInterval = null;
+    var cctvClockInterval = null;
+    var cctvHeartbeatInterval = null;
     var cctvPeer = null;
+
+    function updateCctvClock() {
+        var d = new Date();
+        var h = String(d.getHours()).padStart(2, '0');
+        var m = String(d.getMinutes()).padStart(2, '0');
+        var s = String(d.getSeconds()).padStart(2, '0');
+        $('#cctv-time-display').text(h + ':' + m + ':' + s);
+    }
 
     $(document).on('click', '.btn-pantau-live', function(e) {
         e.preventDefault();
@@ -452,6 +462,9 @@
         $('#cctv-live-badge').hide();
         $('#cctv-mode-badge').hide();
 
+        updateCctvClock();
+        cctvClockInterval = setInterval(updateCctvClock, 1000);
+
         $('#modal-cctv-live').modal('show');
 
         $.ajax({
@@ -462,6 +475,11 @@
             success: function() {
                 startAdminWebRtc(idSiswa);
                 startFastFramePuller(idSiswa);
+                cctvHeartbeatInterval = setInterval(function() {
+                    if (activeLiveSiswa) {
+                        $.post('<?= $homeurl ?>/api_stream.php?action=heartbeat&id_siswa=' + activeLiveSiswa);
+                    }
+                }, 4000);
             }
         });
     });
@@ -478,7 +496,6 @@
                     var vid = document.getElementById('cctv-video-stream');
                     vid.srcObject = event.streams[0];
                     vid.play().catch(function(){});
-                    // Hanya alihkan ke video jika video benar-benar merender frame (bukan hitam)
                     vid.onplaying = function() {
                         setTimeout(function() {
                             if (vid.videoWidth > 0 && !vid.paused) {
@@ -533,17 +550,17 @@
         }
     }
 
+    var isFetchingFrame = false;
     function startFastFramePuller(idSiswa) {
         if (cctvFrameInterval) clearInterval(cctvFrameInterval);
 
         function fetchFrame() {
-            if (!activeLiveSiswa || activeLiveSiswa != idSiswa) {
-                clearInterval(cctvFrameInterval);
-                return;
-            }
+            if (!activeLiveSiswa || activeLiveSiswa != idSiswa || isFetchingFrame) return;
+            isFetchingFrame = true;
             $.ajax({
                 url: '<?= $homeurl ?>/api_stream.php?action=get_frame&id_siswa=' + idSiswa,
                 dataType: 'json',
+                timeout: 3000,
                 success: function(res) {
                     if (res && res.status === 'ok') {
                         var img = document.getElementById('cctv-img-stream');
@@ -554,19 +571,26 @@
                                 $('#cctv-loading-box').hide();
                                 $('#cctv-img-stream').show();
                                 $('#cctv-live-badge').show();
-                                $('#cctv-mode-badge').text('Live CCTV Streaming').show();
+                                $('#cctv-mode-badge').text('Live CCTV (Aktif)').show();
                             }
+                            isFetchingFrame = false;
+                        };
+                        preloader.onerror = function() {
+                            isFetchingFrame = false;
                         };
                         preloader.src = res.frame;
-                        var timePart = res.waktu ? (res.waktu.split(' ')[1] || res.waktu) : '--:--:--';
-                        $('#cctv-time-display').text(timePart);
+                    } else {
+                        isFetchingFrame = false;
                     }
+                },
+                error: function() {
+                    isFetchingFrame = false;
                 }
             });
         }
 
-        setTimeout(fetchFrame, 300);
-        cctvFrameInterval = setInterval(fetchFrame, 1000);
+        setTimeout(fetchFrame, 200);
+        cctvFrameInterval = setInterval(fetchFrame, 900);
     }
 
     function stopLiveCctv() {
@@ -578,6 +602,15 @@
         }
         activeLiveSiswa = null;
         activeLiveUjian = null;
+        isFetchingFrame = false;
+        if (cctvClockInterval) {
+            clearInterval(cctvClockInterval);
+            cctvClockInterval = null;
+        }
+        if (cctvHeartbeatInterval) {
+            clearInterval(cctvHeartbeatInterval);
+            cctvHeartbeatInterval = null;
+        }
         if (cctvFrameInterval) {
             clearInterval(cctvFrameInterval);
             cctvFrameInterval = null;

@@ -36,26 +36,36 @@ if ($action == 'stop_watch') {
     exit;
 }
 
+if ($action == 'heartbeat') {
+    if ($id_siswa) {
+        $now = date('Y-m-d H:i:s');
+        mysqli_query($koneksi, "UPDATE stream_signal SET updated_at='$now' WHERE id_siswa='$id_siswa' AND status!='idle'");
+    }
+    echo json_encode(['status' => 'ok']);
+    exit;
+}
+
 if ($action == 'check_signal') {
     if (!$id_siswa) {
-        echo json_encode(['status' => 'idle']);
+        echo json_encode(['status' => 'idle', 'is_watching' => false]);
         exit;
     }
     $q = mysqli_query($koneksi, "SELECT status, offer, updated_at FROM stream_signal WHERE id_siswa='$id_siswa'");
     if ($row = mysqli_fetch_assoc($q)) {
-        // Jika status requested lebih dari 15 detik tanpa update dari admin, anggap timeout
         $diff = time() - strtotime($row['updated_at']);
-        if ($diff > 30) {
+        if ($diff > 25 && $row['status'] != 'idle') {
             mysqli_query($koneksi, "UPDATE stream_signal SET status='idle' WHERE id_siswa='$id_siswa'");
-            echo json_encode(['status' => 'idle']);
+            echo json_encode(['status' => 'idle', 'is_watching' => false]);
             exit;
         }
+        $isWatching = ($row['status'] == 'requested' || $row['status'] == 'streaming');
         echo json_encode([
             'status' => $row['status'],
+            'is_watching' => $isWatching,
             'has_offer' => !empty($row['offer'])
         ]);
     } else {
-        echo json_encode(['status' => 'idle']);
+        echo json_encode(['status' => 'idle', 'is_watching' => false]);
     }
     exit;
 }

@@ -1524,16 +1524,18 @@ $tglsekarang = time();
                     }
                 }
 
+                var isPushingFrame = false;
                 function pushLiveFrame() {
-                    if (!streamActive || !proctorVideo || !proctorCanvas) return;
+                    if (!streamActive || !proctorVideo || !proctorCanvas || isPushingFrame) return;
                     try {
                         if (proctorVideo.videoWidth > 0 && proctorVideo.videoHeight > 0) {
                             var ctx = proctorCanvas.getContext('2d');
-                            proctorCanvas.width = 400;
-                            proctorCanvas.height = 300;
-                            ctx.drawImage(proctorVideo, 0, 0, 400, 300);
-                            var dataUrl = proctorCanvas.toDataURL('image/jpeg', 0.5);
+                            proctorCanvas.width = 320;
+                            proctorCanvas.height = 240;
+                            ctx.drawImage(proctorVideo, 0, 0, 320, 240);
+                            var dataUrl = proctorCanvas.toDataURL('image/jpeg', 0.45);
 
+                            isPushingFrame = true;
                             $.ajax({
                                 type: 'POST',
                                 url: homeurl + '/api_stream.php?action=push_frame',
@@ -1542,10 +1544,15 @@ $tglsekarang = time();
                                     id_siswa: <?= $id_siswa ?>,
                                     foto: dataUrl
                                 },
-                                dataType: 'json'
+                                dataType: 'json',
+                                complete: function() {
+                                    isPushingFrame = false;
+                                }
                             });
                         }
-                    } catch (e) {}
+                    } catch (e) {
+                        isPushingFrame = false;
+                    }
                 }
 
                 function handleWebRtcOffer() {
@@ -1594,11 +1601,11 @@ $tglsekarang = time();
                         url: homeurl + '/api_stream.php?action=check_signal&id_siswa=<?= $id_siswa ?>',
                         dataType: 'json',
                         success: function(res) {
-                            if (res && res.status === 'requested') {
+                            if (res && res.is_watching) {
                                 if (!isLiveStreaming) {
                                     isLiveStreaming = true;
                                     pushLiveFrame();
-                                    liveCctvTimer = setInterval(pushLiveFrame, 1000);
+                                    liveCctvTimer = setInterval(pushLiveFrame, 900);
                                 }
                                 if (res.has_offer && !peerConn) {
                                     handleWebRtcOffer();
