@@ -1,6 +1,19 @@
 RewriteEngine On 
+
+# Blokir akses ke file sensitif & riwayat git
+<FilesMatch "(?i)(\.git|\.env|\.sql|\.bak|\.log|\.lock|\.json|\.yml|\.yaml)$">
+    Order Deny,Allow
+    Deny from all
+</FilesMatch>
+
+# Pengecualian file config yang dibutuhkan browser jika ada
+<Files "composer.json">
+    Deny from all
+</Files>
+
 RewriteRule ^index\.php$ - [L] 
 RewriteCond %{REQUEST_FILENAME} !-f 
 RewriteCond %{REQUEST_FILENAME} !-d 
 RewriteRule . index.php [L]
+
 Options -Indexes

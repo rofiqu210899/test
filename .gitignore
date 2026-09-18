@@ -1,4 +1,14 @@
-
 *.png
 admin/backup_soal/
+panel/mod_setting/backup_soal/
 config/config.candy.php
+
+# Temporary & Upload cache
+temp/*
+!temp/.htaccess
+temp/word/*
+files/kamera/*
+files/kamera_live/*
+*.log
+*.bak
+*.sql

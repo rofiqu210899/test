@@ -157,36 +157,38 @@ if ($pg == 'import_file') {
     if (isset($_FILES['zip_file']['name'])) {
 
         $file_name = $_FILES['zip_file']['name'];
-        $array = explode(".", $file_name);
-        $name = $array[0];
-        $ext = $array[1];
+        $ext = strtolower(pathinfo($file_name, PATHINFO_EXTENSION));
         if ($ext == 'zip') {
             $path = '../../temp/';
-            $location = $path . $file_name;
+            $location = $path . time() . '_' . mt_rand(1000, 9999) . '.zip';
             if (move_uploaded_file($_FILES['zip_file']['tmp_name'], $location)) {
                 $zip = new ZipArchive;
-                if ($zip->open($location)) {
-                    $zip->extractTo($path);
+                if ($zip->open($location) === true) {
+                    $allowed_ext = array('jpg', 'png', 'jpeg', 'gif', 'mp3', 'wav');
+                    for ($i = 0; $i < $zip->numFiles; $i++) {
+                        $stat = $zip->statIndex($i);
+                        $rawName = $stat['name'];
+                        $entryName = basename($rawName);
+                        $entryExt = strtolower(pathinfo($entryName, PATHINFO_EXTENSION));
+
+                        // Tolak path traversal, file tersembunyi, dan ekstensi berbahaya
+                        if (strpos($rawName, '..') !== false || substr($entryName, 0, 1) === '.') {
+                            continue;
+                        }
+
+                        if (in_array($entryExt, $allowed_ext)) {
+                            $targetPath = '../../files/' . $entryName;
+                            // Salin langsung entry yang aman ke folder files/
+                            $stream = $zip->getStream($rawName);
+                            if ($stream) {
+                                file_put_contents($targetPath, stream_get_contents($stream));
+                                fclose($stream);
+                            }
+                        }
+                    }
                     $zip->close();
                 }
-                $files = scandir($path);
-                //$name is extract folder from zip file  
-                foreach ($files as $file) {
-                    $tmp = explode(".", $file);
-                    $file_ext = end($tmp);
-                    $allowed_ext = array('jpg', 'png', 'jpeg', 'gif', 'mp3', 'wav');
-                    if (in_array($file_ext, $allowed_ext)) {
-                        if (copy($path . $file, '../../files/' . $file)) {
-                            unlink($path . $file);
-                        }
-                        $output .= '<div class="col-md-3"><div style="padding:16px; border:1px solid #CCC;"><img class="img img-responsive" style="height:150px;" src="../../files/' . $file . '"   /></div></div>';
-                    }
-                }
-                $files    = glob($path . "*");
-                foreach ($files as $file) {
-                    if (is_file($file))
-                        unlink($file); // hapus file
-                }
+                @unlink($location);
                 echo "OK";
             }
         } else {

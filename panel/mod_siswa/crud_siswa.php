@@ -119,32 +119,41 @@ if ($pg == 'ambil_siswa') {
 if ($pg == 'uploadfoto') {
     if (isset($_POST["uplod"])) {
         $output = '';
-        if ($_FILES['zip_file']['name'] != '') {
+        if (!empty($_FILES['zip_file']['name'])) {
             $file_name = $_FILES['zip_file']['name'];
-            $array = explode(".", $file_name);
-            $name = $array[0];
-            $ext = $array[1];
+            $ext = strtolower(pathinfo($file_name, PATHINFO_EXTENSION));
             if ($ext == 'zip') {
                 $path = '../foto/fotosiswa/';
-                $location = $path . $file_name;
+                $location = $path . time() . '_' . mt_rand(1000, 9999) . '.zip';
                 if (move_uploaded_file($_FILES['zip_file']['tmp_name'], $location)) {
                     $zip = new ZipArchive;
-                    if ($zip->open($location)) {
-                        $zip->extractTo($path);
+                    if ($zip->open($location) === true) {
+                        $allowed_ext = array('jpg', 'jpeg', 'png');
+                        for ($i = 0; $i < $zip->numFiles; $i++) {
+                            $stat = $zip->statIndex($i);
+                            $rawName = $stat['name'];
+                            $entryName = basename($rawName);
+                            $entryExt = strtolower(pathinfo($entryName, PATHINFO_EXTENSION));
+
+                            if (strpos($rawName, '..') !== false || substr($entryName, 0, 1) === '.') {
+                                continue;
+                            }
+
+                            if (in_array($entryExt, $allowed_ext)) {
+                                $targetPath = $path . $entryName;
+                                $stream = $zip->getStream($rawName);
+                                if ($stream) {
+                                    file_put_contents($targetPath, stream_get_contents($stream));
+                                    fclose($stream);
+                                    $tmp = explode(".", $entryName);
+                                    $nama = $tmp[0];
+                                    mysqli_query($koneksi, "UPDATE siswa set foto='$entryName' where username='$nama'");
+                                }
+                            }
+                        }
                         $zip->close();
                     }
-                    $files = scandir($path);
-                    foreach ($files as $file) {
-                        $file_ext = pathinfo($file, PATHINFO_EXTENSION);
-                        $allowed_ext = array('jpg', 'JPG', 'png');
-                        if (in_array($file_ext, $allowed_ext)) {
-                            $tmp = explode(".", $file);
-                            $nama = $tmp[0];
-                            $output .= '<div class="col-md-3"><div style="padding:16px; border:1px solid #CCC;"><img class="img img-responsive" style="height:150px;" src="../foto/fotosiswa/' . $file . '" /></div></div>';
-                            mysqli_query($koneksi, "UPDATE siswa set foto='$file' where username='$nama'");
-                        }
-                    }
-                    unlink($location);
+                    @unlink($location);
                     $pesan = "<div class='alert alert-success alert-dismissible'><button type='button' class='close' data-dismiss='alert' aria-hidden='true'>×</button><h4><i class='icon fa fa-check'></i> Info</h4>Upload File zip berhasil</div>";
                 }
             } else {

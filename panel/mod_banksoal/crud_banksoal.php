@@ -126,10 +126,43 @@ if ($pg == 'copy_bank') {
     endif;
 }
 if ($pg == 'hapus') {
-    $kode = $_POST['kode'];
-    $exec = mysqli_query($koneksi, "DELETE a.*, b.* FROM mapel a JOIN soal b ON a.id_mapel = b.id_mapel WHERE a.id_mapel in (" . $kode . "')");
-    $exec = mysqli_query($koneksi, "DELETE FROM soal WHERE id_mapel in (" . $kode . ")");
-    $exec = mysqli_query($koneksi, "DELETE FROM mapel  WHERE id_mapel in (" . $kode . ")");
+    $rawKode = $_POST['kode'] ?? ($_POST['id_mapel'] ?? '');
+    if (is_array($rawKode)) {
+        $idList = array_filter(array_map('intval', $rawKode));
+    } else {
+        $idList = array_filter(array_map('intval', explode(',', (string) $rawKode)));
+    }
+
+    if (empty($idList)) {
+        echo 0;
+        exit;
+    }
+
+    $inClause = implode(',', $idList);
+
+    // 1. Hapus file lampiran soal di folder files/ jika ada
+    $qFiles = mysqli_query($koneksi, "SELECT file, file1, fileA, fileB, fileC, fileD, fileE FROM soal WHERE id_mapel IN ($inClause)");
+    if ($qFiles) {
+        while ($row = mysqli_fetch_assoc($qFiles)) {
+            foreach (['file', 'file1', 'fileA', 'fileB', 'fileC', 'fileD', 'fileE'] as $col) {
+                if (!empty($row[$col])) {
+                    $targetFile = __DIR__ . '/../../files/' . $row[$col];
+                    if (file_exists($targetFile) && is_file($targetFile)) {
+                        @unlink($targetFile);
+                    }
+                }
+            }
+        }
+    }
+
+    // 2. Hapus data terkait soal, jawaban, nilai, jadwal ujian, dan bank soal (mapel)
+    mysqli_query($koneksi, "DELETE FROM jawaban_temp WHERE id_mapel IN ($inClause)");
+    mysqli_query($koneksi, "DELETE FROM jawaban WHERE id_mapel IN ($inClause)");
+    mysqli_query($koneksi, "DELETE FROM nilai WHERE id_mapel IN ($inClause)");
+    mysqli_query($koneksi, "DELETE FROM soal WHERE id_mapel IN ($inClause)");
+    mysqli_query($koneksi, "DELETE FROM ujian WHERE id_mapel IN ($inClause)");
+    $exec = mysqli_query($koneksi, "DELETE FROM mapel WHERE id_mapel IN ($inClause)");
+
     if ($exec) {
         echo 1;
     } else {

@@ -97,6 +97,7 @@ if ($ac == '') :
                                                             <a href='?pg=<?= $pg ?>&ac=importsoal&id=<?= $mapel['id_mapel'] ?>'><button class='btn btn-info btn-sm'><i class='fa fa-upload'></i> Import</button></a>
                                                             <a><button class='btn btn-warning btn-sm' data-toggle='modal' data-target='#editbanksoal<?= $mapel['id_mapel'] ?>'><i class='fa fa-edit'></i> Edit</button></a>
                                                             <button class="btn btn-primary btn-sm" data-toggle='modal' data-target='#copybanksoal<?= $mapel['id_mapel'] ?>'><i class="fas fa-copy    "></i> Copy Bank</button>
+                                                            <button type="button" class="btn btn-danger btn-sm btnhapussatu" data-id="<?= $mapel['id_mapel'] ?>" data-nama="<?= htmlspecialchars($mapel['nama'], ENT_QUOTES) ?>"><i class="fa fa-trash"></i> Hapus</button>
                                                         </div>
 
                                                     <?php endif ?>
@@ -1021,41 +1022,82 @@ if ($ac == '') :
 <script>
     $(function() {
         $("#btnhapusbank").click(function() {
-            i = 0;
-            id_array = new Array();
+            var id_array = new Array();
             $("input.cekpilih:checked").each(function() {
-                id_array[i] = $(this).val();
-                i++;
+                id_array.push($(this).val());
             });
+            if (id_array.length === 0) {
+                toastr.warning('Pilih minimal satu bank soal yang ingin dihapus!');
+                return false;
+            }
             swal({
-                title: 'Bank Soal Terpilih ' + i,
-                text: 'Apakah kamu yakin akan menghapus data bank soal yang sudah dipilih  ini ??',
+                title: 'Hapus ' + id_array.length + ' Bank Soal',
+                text: 'Apakah kamu yakin akan menghapus data bank soal yang sudah dipilih ini beserta seluruh soalnya?',
                 type: 'warning',
                 showCancelButton: true,
-                confirmButtonColor: '#3085d6',
-                cancelButtonColor: '#d33',
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#3085d6',
                 confirmButtonText: 'Ya, Hapus!'
             }).then((result) => {
                 if (result.value) {
                     $.ajax({
                         url: 'mod_banksoal/crud_banksoal.php?pg=hapus',
-                        data: "kode=" + id_array,
+                        data: { kode: id_array.join(',') },
                         type: "POST",
                         success: function(respon) {
-                            console.log(respon);
                             if (respon == 1) {
-                                $("input.cekpilih:checked").each(function() {
-                                    $(this).parent().parent().remove('.cekpilih').animate({
-                                        opacity: "hide"
-                                    }, "slow");
-                                })
+                                toastr.success('Bank soal terpilih berhasil dihapus!');
+                                setTimeout(function() {
+                                    location.reload();
+                                }, 800);
+                            } else {
+                                toastr.error('Gagal menghapus bank soal');
                             }
+                        },
+                        error: function() {
+                            toastr.error('Terjadi kesalahan koneksi server');
                         }
-                    })
+                    });
                 }
             });
             return false;
-        })
+        });
+
+        $(document).on('click', '.btnhapussatu', function(e) {
+            e.preventDefault();
+            var id = $(this).data('id');
+            var nama = $(this).data('nama');
+            swal({
+                title: 'Hapus Bank Soal',
+                text: 'Apakah Anda yakin akan menghapus bank soal "' + nama + '" beserta seluruh soal di dalamnya?',
+                type: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#3085d6',
+                confirmButtonText: 'Ya, Hapus!'
+            }).then((result) => {
+                if (result.value) {
+                    $.ajax({
+                        url: 'mod_banksoal/crud_banksoal.php?pg=hapus',
+                        data: { id_mapel: id },
+                        type: "POST",
+                        success: function(respon) {
+                            if (respon == 1) {
+                                toastr.success('Bank soal "' + nama + '" berhasil dihapus!');
+                                setTimeout(function() {
+                                    location.reload();
+                                }, 800);
+                            } else {
+                                toastr.error('Gagal menghapus bank soal');
+                            }
+                        },
+                        error: function() {
+                            toastr.error('Terjadi kesalahan jaringan atau server.');
+                        }
+                    });
+                }
+            });
+        });
     });
     $("#btnkosongsoal").click(function() {
         var id = $(this).data('id');
