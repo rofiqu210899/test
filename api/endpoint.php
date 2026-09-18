@@ -187,13 +187,17 @@ function parse_questions($content, $cfg)
                     'option_count' => 0,
                 ];
             } elseif (preg_match('/^([A-Ea-e])[\.\)]\s*(.*)$/', $t, $mo) && $currentQ) {
-                $currentQ['option'][] = $mo[2];
+                $letter = strtoupper($mo[1]);
+                $mapIdx = ['A' => 0, 'B' => 1, 'C' => 2, 'D' => 3, 'E' => 4];
+                $idx = $mapIdx[$letter] ?? count($currentQ['option']);
+                $currentQ['option'][$idx] = $mo[2];
                 $currentQ['option_count'] = count($currentQ['option']);
+                $currentQ['_last_idx'] = $idx;
             } elseif ($currentQ) {
                 if (empty($currentQ['option'])) {
                     $currentQ['question'] .= '<br>' . $t;
                 } else {
-                    $lastIdx = count($currentQ['option']) - 1;
+                    $lastIdx = $currentQ['_last_idx'] ?? (count($currentQ['option']) - 1);
                     $currentQ['option'][$lastIdx] .= ' ' . $t;
                 }
             }
@@ -409,7 +413,7 @@ switch ($action) {
             api_fail('Struktur word/document.xml tidak ditemukan.', 400);
         }
         $content = file_get_contents($docXml);
-        $content = str_replace(['<w:br/>', '<w:br />', '<w:br>'], "\n", $content);
+        $content = str_replace(['<w:br/>', '<w:br />', '<w:br>', '<w:tab/>', '<w:tab />'], "\n", $content);
         $content = str_replace('</w:p>', "\n", $content); // pertahankan pemisah paragraf
         $content = htmlentities(strip_tags($content, '<a:blip>'));
 
