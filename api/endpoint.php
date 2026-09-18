@@ -317,22 +317,31 @@ function insert_questions($koneksi, $id_mapel, $questions)
 }
 
 // ---------- Buat mapel baru bila belum ada ----------
-function ensure_mapel($koneksi, $nama, $guru = '', $kelas = '', $level = '')
+function ensure_mapel($koneksi, $nama, $guru = '', $kelas = '', $level = '', $customKode = '')
 {
     $nama = trim($nama);
     if ($nama === '') {
         api_fail('Nama mapel kosong. Kirim field "mapel".', 400);
     }
+    $customKode = trim($customKode);
     $q = mysqli_query($koneksi, "SELECT id_mapel FROM mapel WHERE nama = '" . mysqli_real_escape_string($koneksi, $nama) . "'");
     if ($q && mysqli_num_rows($q) > 0) {
         $row = mysqli_fetch_array($q);
-        return (int) $row['id_mapel'];
+        $id_mapel = (int) $row['id_mapel'];
+        if ($customKode !== '') {
+            mysqli_query($koneksi, "UPDATE mapel SET kode = '" . mysqli_real_escape_string($koneksi, $customKode) . "' WHERE id_mapel = $id_mapel");
+        }
+        return $id_mapel;
     }
     // Kolom NOT NULL wajib diisi: kode,idpk,idguru,nama,jml_soal,jml_esai,
     // tampil_pg,tampil_esai,bobot_pg,bobot_esai,level,opsi,kelas,status
     $lvl = $level !== '' ? $level : '7';
-    $cleanKode = strtoupper(substr(preg_replace('/[^A-Za-z0-9]/', '', $nama), 0, 5));
-    $kode = $cleanKode . ($lvl !== '' ? $lvl : '');
+    if ($customKode !== '') {
+        $kode = $customKode;
+    } else {
+        $cleanKode = strtoupper(substr(preg_replace('/[^A-Za-z0-9]/', '', $nama), 0, 5));
+        $kode = $cleanKode . ($lvl !== '' ? $lvl : '');
+    }
     $idpk  = 'a:1:{i:0;s:5:"semua";}'; // paket "semua" (compat Candy CBT)
     $idguru = $guru !== '' ? $guru : '0';
     $jml_soal = 0;
@@ -378,7 +387,8 @@ switch ($action) {
         }
         $mapelName = $_POST['mapel'] ?? '';
         $levelParam = $_POST['level'] ?? '';
-        $id_mapel = ensure_mapel($koneksi, $mapelName, '', '', $levelParam);
+        $kodeParam = $_POST['kode'] ?? '';
+        $id_mapel = ensure_mapel($koneksi, $mapelName, '', '', $levelParam, $kodeParam);
         $file = $_FILES['file'];
 
         // Cek ekstensi .docx (word)
@@ -461,7 +471,8 @@ switch ($action) {
             api_fail('Field "mapel" wajib diisi.', 400);
         }
         $levelParam = trim($body['level'] ?? '');
-        $id_mapel = ensure_mapel($koneksi, $mapelName, '', '', $levelParam);
+        $kodeParam = trim($body['kode'] ?? '');
+        $id_mapel = ensure_mapel($koneksi, $mapelName, '', '', $levelParam, $kodeParam);
 
         $questions = [];
         foreach ($body['questions'] as $q) {
