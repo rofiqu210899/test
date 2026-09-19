@@ -97,6 +97,7 @@ if ($ac == '') :
                                                             <a href='?pg=<?= $pg ?>&ac=importsoal&id=<?= $mapel['id_mapel'] ?>'><button class='btn btn-info btn-sm'><i class='fa fa-upload'></i> Import</button></a>
                                                             <a><button class='btn btn-warning btn-sm' data-toggle='modal' data-target='#editbanksoal<?= $mapel['id_mapel'] ?>'><i class='fa fa-edit'></i> Edit</button></a>
                                                             <button class="btn btn-primary btn-sm" data-toggle='modal' data-target='#copybanksoal<?= $mapel['id_mapel'] ?>'><i class="fas fa-copy    "></i> Copy Bank</button>
+                                                            <button type="button" class="btn btn-primary bg-purple btn-sm btn-analisis-ai" data-id="<?= $mapel['id_mapel'] ?>" data-kode="<?= htmlspecialchars($mapel['kode'], ENT_QUOTES) ?>" data-nama="<?= htmlspecialchars($mapel['nama'], ENT_QUOTES) ?>"><i class="fa fa-robot"></i> Analisis AI</button>
                                                             <button type="button" class="btn btn-danger btn-sm btnhapussatu" data-id="<?= $mapel['id_mapel'] ?>" data-nama="<?= htmlspecialchars($mapel['nama'], ENT_QUOTES) ?>"><i class="fa fa-trash"></i> Hapus</button>
                                                         </div>
 
@@ -693,6 +694,7 @@ if ($ac == '') :
                     <div class='box-tools pull-right '>
                         <a href='?pg=<?= $pg ?>&ac=input&id=<?= $id_mapel ?>&no=1&jenis=1' class='btn btn-sm  btn-primary <?= $hidex ?>'><i class='fa fa-plus'></i><span class='hidden-xs'> Add</span> PG</a>
                         <a href='?pg=<?= $pg ?>&ac=input&id=<?= $id_mapel ?>&no=1&jenis=2' class='btn btn-sm btn-warning <?= $hide ?>'><i class='fa fa-plus'></i><span class='hidden-xs'> Add</span> Essai</a>
+                        <button type="button" class="btn btn-sm btn-flat bg-purple btn-analisis-ai" data-id="<?= $id_mapel ?>" data-kode="<?= htmlspecialchars($namamapel['kode'], ENT_QUOTES) ?>" data-nama="<?= htmlspecialchars($namamapel['nama'], ENT_QUOTES) ?>"><i class="fa fa-robot"></i><span class="hidden-xs"> Analisis AI</span></button>
                         <a class='btn btn-sm btn-flat btn-success' href='mod_banksoal/soal_excel.php?m=<?= $id_mapel ?>'><i class="fas fa-file-excel    "></i><span class='hidden-xs'> Excel</span></a>
                         <button class='btn btn-sm btn-flat btn-success' onclick="frames['frameresult'].print()"><i class='fa fa-print'></i><span class='hidden-xs'> Print</span></button>
                         <button id="btnkosongsoal" data-id="<?= $id_mapel ?>" class='btn btn-sm btn-danger'><i class='fa fa-trash'></i><span class='hidden-xs'> Kosongkan </span></button>
@@ -1178,7 +1180,467 @@ if ($ac == '') :
             }
         });
     });
+
+    // ============================================================
+    // JAVASCRIPT ANALISIS SOAL & KUNCI JAWABAN GEMINI AI
+    // ============================================================
+    var currentAiMapelId = 0;
+    var currentAiKode = '';
+    var currentAiNama = '';
+    var currentAiTotal = 0;
+    var aiResults = [];
+
+    $(document).on('click', '.btn-analisis-ai', function(e) {
+        e.preventDefault();
+        currentAiMapelId = $(this).data('id');
+        currentAiKode = $(this).data('kode') || '-';
+        currentAiNama = $(this).data('nama') || '-';
+        aiResults = [];
+
+        $('#ai-modal-kode').text(currentAiKode);
+        $('#ai-modal-nama').text(currentAiNama);
+        $('#ai-modal-model').text('-');
+        $('#ai-error-container').hide().html('');
+        $('#ai-loading-container').hide();
+        $('#ai-result-container').hide();
+        $('#ai-pre-analysis').hide();
+
+        $('#modal-analisis-ai').modal('show');
+
+        // Ambil info status AI & jumlah soal
+        $.ajax({
+            type: 'POST',
+            url: 'mod_banksoal/ajax_analisis_ai.php?action=info',
+            data: { id_mapel: currentAiMapelId },
+            dataType: 'json',
+            success: function(res) {
+                if (res.status === 'success') {
+                    currentAiTotal = res.total_soal;
+                    $('#ai-modal-model').text(res.ai_model || 'gemini-2.5-flash');
+                    $('#ai-total-soal-ready').text(res.total_soal);
+
+                    if (!res.has_api_key) {
+                        $('#ai-error-container').html(
+                            '<div class="callout callout-warning" style="background:#fff; border-left-color:#f39c12;">' +
+                            '<h4><i class="fa fa-warning"></i> Gemini API Key Belum Dikonfigurasi</h4>' +
+                            '<p>Anda belum memasukkan Google Gemini API Key. Silakan buka menu Pengaturan untuk memasukkan API Key terlebih dahulu.</p>' +
+                            '<p><a href="?pg=setting#tab_ai" class="btn btn-sm btn-warning btn-flat"><i class="fa fa-cog"></i> Buka Pengaturan AI</a></p>' +
+                            '</div>'
+                        ).show();
+                        return;
+                    }
+
+                    if (!res.ai_active) {
+                        $('#ai-error-container').html(
+                            '<div class="callout callout-warning" style="background:#fff; border-left-color:#f39c12;">' +
+                            '<h4><i class="fa fa-warning"></i> Fitur AI Sedang Nonaktif</h4>' +
+                            '<p>Fitur AI saat ini disetel NONAKTIF. Silakan aktifkan terlebih dahulu di menu Pengaturan.</p>' +
+                            '<p><a href="?pg=setting#tab_ai" class="btn btn-sm btn-warning btn-flat"><i class="fa fa-cog"></i> Aktifkan Fitur AI</a></p>' +
+                            '</div>'
+                        ).show();
+                        return;
+                    }
+
+                    if (currentAiTotal <= 0) {
+                        $('#ai-error-container').html(
+                            '<div class="callout callout-info" style="background:#fff; border-left-color:#00c0ef;">' +
+                            '<h4><i class="fa fa-info-circle"></i> Soal Pilihan Ganda Kosong</h4>' +
+                            '<p>Bank soal ini belum memiliki butir soal pilihan ganda untuk dianalisis.</p>' +
+                            '</div>'
+                        ).show();
+                        return;
+                    }
+
+                    $('#ai-pre-analysis').show();
+                } else {
+                    $('#ai-error-container').html(
+                        '<div class="alert alert-danger"><i class="fa fa-ban"></i> ' + (res.message || 'Gagal memuat info bank soal') + '</div>'
+                    ).show();
+                }
+            },
+            error: function(xhr) {
+                $('#ai-error-container').html(
+                    '<div class="alert alert-danger"><i class="fa fa-ban"></i> Gagal menghubungi server: ' + xhr.statusText + '</div>'
+                ).show();
+            }
+        });
+    });
+
+    $('#btn-mulai-analisis, #btn-reanalisis').click(function() {
+        $('#ai-pre-analysis').hide();
+        $('#ai-result-container').hide();
+        $('#ai-error-container').hide().html('');
+        $('#ai-loading-container').show();
+
+        aiResults = [];
+        $('#ai-progress-bar').css('width', '0%').text('0%');
+        $('#ai-progress-status').text('Menganalisis Butir Soal dengan Gemini AI...');
+        $('#ai-progress-detail').text('Menghubungkan ke API Gemini...');
+
+        runAiBatch(0, 10);
+    });
+
+    function runAiBatch(offset, limit) {
+        var batchNo = Math.floor(offset / limit) + 1;
+        var endRange = Math.min(offset + limit, currentAiTotal);
+        $('#ai-progress-detail').text('Menganalisis butir soal ' + (offset + 1) + ' s/d ' + endRange + ' dari ' + currentAiTotal + ' soal...');
+
+        $.ajax({
+            type: 'POST',
+            url: 'mod_banksoal/ajax_analisis_ai.php?action=analisis',
+            data: {
+                id_mapel: currentAiMapelId,
+                offset: offset,
+                limit: limit
+            },
+            dataType: 'json',
+            success: function(res) {
+                if (res.status === 'success') {
+                    if (res.hasil && res.hasil.length > 0) {
+                        aiResults = aiResults.concat(res.hasil);
+                    }
+
+                    var progress = Math.min(100, Math.round((res.processed_total / currentAiTotal) * 100));
+                    $('#ai-progress-bar').css('width', progress + '%').text(progress + '%');
+
+                    if (!res.is_finished && res.processed_total < currentAiTotal) {
+                        runAiBatch(res.processed_total, limit);
+                    } else {
+                        // Selesai seluruh soal
+                        $('#ai-progress-bar').css('width', '100%').text('100%');
+                        setTimeout(function() {
+                            $('#ai-loading-container').hide();
+                            renderAiResults();
+                        }, 400);
+                    }
+                } else {
+                    $('#ai-loading-container').hide();
+                    $('#ai-error-container').html(
+                        '<div class="alert alert-danger"><h4><i class="icon fa fa-ban"></i> Terjadi Kesalahan Saat Analisis</h4><p>' + res.message + '</p></div>'
+                    ).show();
+                }
+            },
+            error: function(xhr) {
+                $('#ai-loading-container').hide();
+                $('#ai-error-container').html(
+                    '<div class="alert alert-danger"><h4><i class="icon fa fa-ban"></i> Error Komunikasi</h4><p>HTTP Error ' + xhr.status + ': ' + xhr.statusText + '</p></div>'
+                ).show();
+            }
+        });
+    }
+
+    function renderAiResults() {
+        var total = aiResults.length;
+        var sesuai = 0;
+        var salah = 0;
+        var ambigu = 0;
+
+        var tbody = $('#tbody-hasil-ai');
+        tbody.empty();
+
+        aiResults.forEach(function(item) {
+            var st = item.status;
+            if (st === 'SESUAI') sesuai++;
+            else if (st === 'KUNCI_SALAH') salah++;
+            else if (st === 'AMBIGU') ambigu++;
+
+            var badgeClass = 'label-success';
+            var badgeText = 'SESUAI';
+            if (st === 'KUNCI_SALAH') {
+                badgeClass = 'label-danger';
+                badgeText = 'KUNCI SALAH';
+            } else if (st === 'AMBIGU') {
+                badgeClass = 'label-warning';
+                badgeText = 'AMBIGU';
+            }
+
+            var btnAksi = '-';
+            if (st === 'KUNCI_SALAH' && item.kunci_ai) {
+                btnAksi = '<button type="button" class="btn btn-xs btn-danger btn-flat btn-apply-key" data-id="' + item.id_soal + '" data-nomor="' + item.nomor + '" data-kunci="' + item.kunci_ai + '" title="Terapkan Kunci Rekomendasi AI">' +
+                          '<i class="fa fa-check"></i> Ubah ke ' + item.kunci_ai + '</button>';
+            }
+
+            var row = '<tr class="row-hasil-ai" data-status="' + st + '" id="row-soal-' + item.id_soal + '">' +
+                '<td style="text-align: center; font-weight: bold;">' + item.nomor + '</td>' +
+                '<td>' + (item.soal_preview || '-') + '</td>' +
+                '<td style="text-align: center;"><span class="badge bg-gray" id="lbl-cbt-' + item.id_soal + '" style="font-size: 13px;">' + (item.kunci_sekarang || '-') + '</span></td>' +
+                '<td style="text-align: center;"><span class="badge bg-purple" style="font-size: 13px;">' + (item.kunci_ai || '-') + '</span></td>' +
+                '<td style="text-align: center;"><span class="label ' + badgeClass + '" id="lbl-status-' + item.id_soal + '" style="font-size: 11px;">' + badgeText + '</span></td>' +
+                '<td style="font-size: 12px; color: #444;">' + (item.alasan || '-') + '</td>' +
+                '<td style="text-align: center;" id="col-aksi-' + item.id_soal + '">' + btnAksi + '</td>' +
+                '</tr>';
+            tbody.append(row);
+        });
+
+        $('#kpi-total').text(total);
+        $('#kpi-sesuai').text(sesuai);
+        $('#kpi-salah').text(salah);
+        $('#kpi-ambigu').text(ambigu);
+
+        $('#count-filter-all').text(total);
+        $('#count-filter-sesuai').text(sesuai);
+        $('#count-filter-salah').text(salah);
+        $('#count-filter-ambigu').text(ambigu);
+
+        if (salah > 0) {
+            $('#btn-terapkan-semua-ai').show();
+        } else {
+            $('#btn-terapkan-semua-ai').hide();
+        }
+
+        $('#ai-filter-group button').removeClass('active');
+        $('#ai-filter-group button[data-filter="all"]').addClass('active');
+
+        $('#ai-result-container').slideDown();
+    }
+
+    // Filter baris hasil analisis
+    $(document).on('click', '#ai-filter-group button', function() {
+        $('#ai-filter-group button').removeClass('active');
+        $(this).addClass('active');
+        var filter = $(this).data('filter');
+
+        if (filter === 'all') {
+            $('.row-hasil-ai').show();
+        } else {
+            $('.row-hasil-ai').hide();
+            $('.row-hasil-ai[data-status="' + filter + '"]').show();
+        }
+    });
+
+    // Terapkan Kunci Rekomendasi AI per soal
+    $(document).on('click', '.btn-apply-key', function() {
+        var btn = $(this);
+        var idSoal = btn.data('id');
+        var nomor = btn.data('nomor');
+        var kunciBaru = btn.data('kunci');
+        var origHtml = btn.html();
+
+        btn.html('<i class="fa fa-spinner fa-spin"></i>').prop('disabled', true);
+
+        $.ajax({
+            type: 'POST',
+            url: 'mod_banksoal/ajax_analisis_ai.php?action=update_kunci',
+            data: {
+                id_soal: idSoal,
+                kunci_baru: kunciBaru
+            },
+            dataType: 'json',
+            success: function(res) {
+                if (res.status === 'success') {
+                    toastr.success('Kunci soal No. ' + nomor + ' berhasil diubah menjadi ' + kunciBaru);
+
+                    $('#lbl-cbt-' + idSoal).text(kunciBaru);
+                    $('#lbl-status-' + idSoal).removeClass('label-danger label-warning').addClass('label-success').text('SESUAI (DIUBAH)');
+                    $('#col-aksi-' + idSoal).html('<span class="text-green" style="font-size: 11px;"><i class="fa fa-check"></i> Diperbarui</span>');
+                    $('#row-soal-' + idSoal).attr('data-status', 'SESUAI');
+
+                    // Update KPI counters
+                    var curSalah = parseInt($('#kpi-salah').text()) || 0;
+                    var curSesuai = parseInt($('#kpi-sesuai').text()) || 0;
+                    if (curSalah > 0) {
+                        $('#kpi-salah').text(curSalah - 1);
+                        $('#count-filter-salah').text(curSalah - 1);
+                    }
+                    $('#kpi-sesuai').text(curSesuai + 1);
+                    $('#count-filter-sesuai').text(curSesuai + 1);
+
+                    if (curSalah - 1 <= 0) {
+                        $('#btn-terapkan-semua-ai').hide();
+                    }
+                } else {
+                    btn.html(origHtml).prop('disabled', false);
+                    toastr.error(res.message || 'Gagal mengubah kunci jawaban.');
+                }
+            },
+            error: function(xhr) {
+                btn.html(origHtml).prop('disabled', false);
+                toastr.error('Error komunikasi: ' + xhr.statusText);
+            }
+        });
+    });
+
+    // Terapkan Semua Kunci AI yang Salah
+    $('#btn-terapkan-semua-ai').click(function() {
+        var wrongButtons = $('.btn-apply-key:visible');
+        if (wrongButtons.length === 0) {
+            wrongButtons = $('.btn-apply-key');
+        }
+
+        if (wrongButtons.length === 0) {
+            toastr.info('Tidak ada kunci jawaban salah yang perlu diperbarui.');
+            return;
+        }
+
+        if (!confirm('Apakah Anda yakin ingin menerapkan semua (' + wrongButtons.length + ') kunci jawaban rekomendasi AI ke database?')) {
+            return;
+        }
+
+        var btnAll = $(this);
+        btnAll.html('<i class="fa fa-spinner fa-spin"></i> Menerapkan...').prop('disabled', true);
+
+        var idx = 0;
+        function processNext() {
+            if (idx >= wrongButtons.length) {
+                btnAll.html('<i class="fa fa-check"></i> Selesai Diterapkan').prop('disabled', true);
+                toastr.success('Semua kunci jawaban rekomendasi AI berhasil diterapkan!');
+                return;
+            }
+            var b = $(wrongButtons[idx]);
+            var idSoal = b.data('id');
+            var kunciBaru = b.data('kunci');
+            var nomor = b.data('nomor');
+
+            $.ajax({
+                type: 'POST',
+                url: 'mod_banksoal/ajax_analisis_ai.php?action=update_kunci',
+                data: { id_soal: idSoal, kunci_baru: kunciBaru },
+                dataType: 'json',
+                success: function(res) {
+                    if (res.status === 'success') {
+                        $('#lbl-cbt-' + idSoal).text(kunciBaru);
+                        $('#lbl-status-' + idSoal).removeClass('label-danger').addClass('label-success').text('SESUAI');
+                        $('#col-aksi-' + idSoal).html('<span class="text-green" style="font-size: 11px;"><i class="fa fa-check"></i> Diperbarui</span>');
+                        $('#row-soal-' + idSoal).attr('data-status', 'SESUAI');
+                    }
+                    idx++;
+                    processNext();
+                },
+                error: function() {
+                    idx++;
+                    processNext();
+                }
+            });
+        }
+        processNext();
+    });
 </script>
+
+<!-- Modal Analisis AI -->
+<div class="modal fade" id="modal-analisis-ai" tabindex="-1" role="dialog" aria-labelledby="modalAiTitle" aria-hidden="true" data-backdrop="static">
+    <div class="modal-dialog modal-lg" role="document" style="width: 92%; max-width: 1100px;">
+        <div class="modal-content" style="border-radius: 6px; overflow: hidden; box-shadow: 0 5px 25px rgba(0,0,0,0.25);">
+            <div class="modal-header bg-purple" style="padding: 14px 20px;">
+                <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close" style="color: #fff; opacity: 0.85; font-size: 24px;">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+                <h4 class="modal-title" id="modalAiTitle" style="color: #fff; font-weight: 600; margin: 0;">
+                    <i class="fa fa-robot"></i> Analisis Kesesuaian Soal & Kunci Jawaban (Gemini AI)
+                </h4>
+                <div style="font-size: 12px; color: #e9d5ff; margin-top: 4px;">
+                    Bank Soal: <b id="ai-modal-kode">-</b> &bull; Mata Pelajaran: <span id="ai-modal-nama">-</span> &bull; Model AI: <span id="ai-modal-model">-</span>
+                </div>
+            </div>
+
+            <div class="modal-body" style="padding: 20px; background: #fafafa;">
+                <div id="ai-error-container" style="display: none;"></div>
+
+                <div id="ai-pre-analysis" style="display: none;">
+                    <div class="callout callout-info" style="border-left-color: #605ca8; background: #fff; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); color: #333;">
+                        <h4 style="color: #605ca8; font-weight: 600;"><i class="fa fa-info-circle"></i> Siap Melakukan Validasi Soal</h4>
+                        <p style="margin-bottom: 5px;">Google Gemini AI akan meneliti setiap teks soal, opsi jawaban (A, B, C, D, E), dan membandingkannya dengan kunci jawaban saat ini.</p>
+                        <p style="margin-bottom: 0;"><b>Total Soal Pilihan Ganda:</b> <span class="badge bg-purple" id="ai-total-soal-ready" style="font-size: 14px;">0</span> butir soal.</p>
+                    </div>
+                    <div class="text-center" style="margin: 25px 0 15px 0;">
+                        <button type="button" class="btn btn-lg bg-purple btn-flat" id="btn-mulai-analisis" style="padding: 12px 35px; font-weight: 600; border-radius: 4px;">
+                            <i class="fa fa-play-circle"></i> Mulai Analisis Soal Sekarang
+                        </button>
+                    </div>
+                </div>
+
+                <div id="ai-loading-container" style="display: none; padding: 25px 15px;">
+                    <div class="text-center" style="margin-bottom: 15px;">
+                        <i class="fa fa-robot fa-spin fa-3x text-purple" style="margin-bottom: 12px;"></i>
+                        <h4 id="ai-progress-status" style="font-weight: 600; color: #333; margin-top: 0;">Menganalisis Butir Soal dengan Gemini AI...</h4>
+                        <p class="text-muted" id="ai-progress-detail" style="font-size: 13px;">Menghubungkan ke API Gemini...</p>
+                    </div>
+                    <div class="progress progress-striped active" style="height: 24px; border-radius: 12px; margin-bottom: 8px; background: #e9ecef;">
+                        <div id="ai-progress-bar" class="progress-bar progress-bar-purple" role="progressbar" style="width: 0%; line-height: 24px; font-weight: bold; font-size: 12px; background-color: #605ca8;">0%</div>
+                    </div>
+                    <div class="text-center text-muted" style="font-size: 12px;">
+                        <i class="fa fa-lock"></i> Analisis diproses secara bertahap (batch) untuk keakuratan dan stabilitas.
+                    </div>
+                </div>
+
+                <div id="ai-result-container" style="display: none;">
+                    <div class="row" style="margin-bottom: 15px;">
+                        <div class="col-md-3 col-xs-6">
+                            <div class="info-box bg-aqua" style="border-radius: 5px; min-height: 70px;">
+                                <span class="info-box-icon" style="height: 70px; line-height: 70px; background: rgba(0,0,0,0.1); font-size: 32px;"><i class="fa fa-list-ol"></i></span>
+                                <div class="info-box-content">
+                                    <span class="info-box-text" style="font-size: 11px;">Total Soal</span>
+                                    <span class="info-box-number" id="kpi-total" style="font-size: 22px;">0</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 col-xs-6">
+                            <div class="info-box bg-green" style="border-radius: 5px; min-height: 70px;">
+                                <span class="info-box-icon" style="height: 70px; line-height: 70px; background: rgba(0,0,0,0.1); font-size: 32px;"><i class="fa fa-check-circle"></i></span>
+                                <div class="info-box-content">
+                                    <span class="info-box-text" style="font-size: 11px;">Kunci Sesuai</span>
+                                    <span class="info-box-number" id="kpi-sesuai" style="font-size: 22px;">0</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 col-xs-6">
+                            <div class="info-box bg-red" style="border-radius: 5px; min-height: 70px;">
+                                <span class="info-box-icon" style="height: 70px; line-height: 70px; background: rgba(0,0,0,0.1); font-size: 32px;"><i class="fa fa-times-circle"></i></span>
+                                <div class="info-box-content">
+                                    <span class="info-box-text" style="font-size: 11px;">Kunci Salah</span>
+                                    <span class="info-box-number" id="kpi-salah" style="font-size: 22px;">0</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 col-xs-6">
+                            <div class="info-box bg-yellow" style="border-radius: 5px; min-height: 70px;">
+                                <span class="info-box-icon" style="height: 70px; line-height: 70px; background: rgba(0,0,0,0.1); font-size: 32px;"><i class="fa fa-exclamation-triangle"></i></span>
+                                <div class="info-box-content">
+                                    <span class="info-box-text" style="font-size: 11px;">Ambigu / Cacat</span>
+                                    <span class="info-box-number" id="kpi-ambigu" style="font-size: 22px;">0</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+                        <div class="btn-group" id="ai-filter-group">
+                            <button type="button" class="btn btn-default btn-sm active" data-filter="all">Semua (<span id="count-filter-all">0</span>)</button>
+                            <button type="button" class="btn btn-default btn-sm text-red" data-filter="KUNCI_SALAH"><i class="fa fa-times-circle"></i> Kunci Salah (<span id="count-filter-salah">0</span>)</button>
+                            <button type="button" class="btn btn-default btn-sm text-yellow" data-filter="AMBIGU"><i class="fa fa-exclamation-triangle"></i> Ambigu (<span id="count-filter-ambigu">0</span>)</button>
+                            <button type="button" class="btn btn-default btn-sm text-green" data-filter="SESUAI"><i class="fa fa-check-circle"></i> Sesuai (<span id="count-filter-sesuai">0</span>)</button>
+                        </div>
+                        <div>
+                            <button type="button" class="btn btn-sm btn-danger btn-flat" id="btn-terapkan-semua-ai" style="display: none;"><i class="fa fa-check-square-o"></i> Terapkan Semua Kunci AI</button>
+                            <button type="button" class="btn btn-sm btn-default btn-flat" id="btn-reanalisis"><i class="fa fa-refresh"></i> Ulangi</button>
+                        </div>
+                    </div>
+
+                    <div class="table-responsive" style="max-height: 480px; overflow-y: auto; border: 1px solid #d2d6de; border-radius: 4px; background: #fff;">
+                        <table class="table table-bordered table-striped table-hover" id="table-hasil-ai" style="margin-bottom: 0; font-size: 13px;">
+                            <thead style="background: #f4f5f9; position: sticky; top: 0; z-index: 5;">
+                                <tr>
+                                    <th style="width: 50px; text-align: center;">No</th>
+                                    <th>Ringkasan Teks Soal</th>
+                                    <th style="width: 85px; text-align: center;">Kunci CBT</th>
+                                    <th style="width: 85px; text-align: center;">Kunci AI</th>
+                                    <th style="width: 110px; text-align: center;">Status</th>
+                                    <th>Analisis / Alasan AI</th>
+                                    <th style="width: 130px; text-align: center;">Tindakan</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tbody-hasil-ai"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer" style="background: #f4f5f9; padding: 12px 20px;">
+                <button type="button" class="btn btn-default btn-flat" data-dismiss="modal">Tutup</button>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
 <script>
     tinymce.init({
         selector: '.editor1',

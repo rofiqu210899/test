@@ -454,3 +454,36 @@ function lamaujian($seconds)
 	}
 	return $string;
 }
+
+function get_ai_setting($koneksi)
+{
+	static $ai_setting = null;
+	if ($ai_setting !== null) return $ai_setting;
+
+	// Auto-migrate columns if not exist
+	$check = mysqli_query($koneksi, "SHOW COLUMNS FROM setting LIKE 'gemini_api_key'");
+	if ($check && mysqli_num_rows($check) == 0) {
+		@mysqli_query($koneksi, "ALTER TABLE setting ADD COLUMN gemini_api_key VARCHAR(255) NULL");
+		@mysqli_query($koneksi, "ALTER TABLE setting ADD COLUMN gemini_model VARCHAR(100) DEFAULT 'gemini-2.5-flash'");
+		@mysqli_query($koneksi, "ALTER TABLE setting ADD COLUMN gemini_status TINYINT(1) DEFAULT 1");
+		@mysqli_query($koneksi, "ALTER TABLE setting ADD COLUMN gemini_prompt TEXT NULL");
+	}
+
+	$q = mysqli_query($koneksi, "SELECT gemini_api_key, gemini_model, gemini_status, gemini_prompt FROM setting WHERE id_setting='1'");
+	if ($q && $row = mysqli_fetch_assoc($q)) {
+		$ai_setting = [
+			'api_key' => $row['gemini_api_key'] ?? '',
+			'model' => !empty($row['gemini_model']) ? $row['gemini_model'] : 'gemini-2.5-flash',
+			'status' => isset($row['gemini_status']) ? intval($row['gemini_status']) : 1,
+			'prompt' => $row['gemini_prompt'] ?? ''
+		];
+	} else {
+		$ai_setting = [
+			'api_key' => '',
+			'model' => 'gemini-2.5-flash',
+			'status' => 1,
+			'prompt' => ''
+		];
+	}
+	return $ai_setting;
+}

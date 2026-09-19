@@ -164,3 +164,82 @@ if ($pg == 'setting_restore') {
         echo "data berhasil di restore";
     }
 }
+if ($pg == 'setting_ai') {
+    header('Content-Type: application/json; charset=utf-8');
+    get_ai_setting($koneksi);
+    $data = [
+        'gemini_api_key' => trim($_POST['gemini_api_key'] ?? ''),
+        'gemini_model'   => trim($_POST['gemini_model'] ?? 'gemini-2.5-flash'),
+        'gemini_status'  => isset($_POST['gemini_status']) ? intval($_POST['gemini_status']) : 1,
+        'gemini_prompt'  => trim($_POST['gemini_prompt'] ?? '')
+    ];
+    $exec = update($koneksi, 'setting', $data, ['id_setting' => 1]);
+    if ($exec) {
+        echo json_encode(['status' => 'success', 'message' => 'Konfigurasi Gemini AI berhasil disimpan']);
+    } else {
+        echo json_encode(['status' => 'error', 'message' => 'Gagal menyimpan konfigurasi: ' . mysqli_error($koneksi)]);
+    }
+    exit;
+}
+if ($pg == 'test_gemini') {
+    header('Content-Type: application/json; charset=utf-8');
+    $apiKey = trim($_POST['gemini_api_key'] ?? '');
+    $model = trim($_POST['gemini_model'] ?? 'gemini-2.5-flash');
+    if ($apiKey === '') {
+        $ai_set = get_ai_setting($koneksi);
+        $apiKey = $ai_set['api_key'];
+        if ($apiKey === '') {
+            echo json_encode(['status' => 'error', 'message' => 'API Key belum diisi. Masukkan Gemini API Key terlebih dahulu.']);
+            exit;
+        }
+    }
+
+    $url = "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?key={$apiKey}";
+    $payload = [
+        'contents' => [
+            [
+                'parts' => [
+                    ['text' => 'Halo! Balas hanya satu kalimat pendek dalam bahasa Indonesia: "Koneksi Google Gemini AI berhasil terhubung ke Candy CBT."']
+                ]
+            ]
+        ],
+        'generationConfig' => [
+            'temperature' => 0.2,
+            'maxOutputTokens' => 100
+        ]
+    ];
+
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => json_encode($payload),
+        CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_TIMEOUT => 20
+    ]);
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curlErr = curl_error($ch);
+    curl_close($ch);
+
+    if ($curlErr) {
+        echo json_encode(['status' => 'error', 'message' => 'CURL Error: ' . $curlErr]);
+        exit;
+    }
+
+    $resJson = json_decode($response, true);
+    if ($httpCode === 200 && isset($resJson['candidates'][0]['content']['parts'][0]['text'])) {
+        $reply = trim($resJson['candidates'][0]['content']['parts'][0]['text']);
+        echo json_encode([
+            'status' => 'success',
+            'message' => 'Koneksi Gemini AI Berhasil!',
+            'model' => $model,
+            'reply' => $reply
+        ]);
+    } else {
+        $errMsg = $resJson['error']['message'] ?? ("HTTP {$httpCode}: " . substr($response, 0, 300));
+        echo json_encode(['status' => 'error', 'message' => 'Gagal terhubung ke Gemini: ' . $errMsg]);
+    }
+    exit;
+}

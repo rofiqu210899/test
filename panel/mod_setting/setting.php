@@ -5,6 +5,7 @@ $admin = mysqli_fetch_array(mysqli_query($koneksi, "SELECT * FROM pengawas WHERE
 $setting = mysqli_fetch_array(mysqli_query($koneksi, "SELECT * FROM setting WHERE id_setting='1'"));
 $setting['alamat'] = str_replace('<br />', '', $setting['alamat']);
 $setting['header'] = str_replace('<br />', '', $setting['header']);
+$ai_set = get_ai_setting($koneksi);
 ?>
 <div class='row'>
     <div class='col-md-12'>
@@ -20,6 +21,7 @@ $setting['header'] = str_replace('<br />', '', $setting['header']);
                         <li class=""><a href="#tab_2" data-toggle="tab" aria-expanded="false">Hapus Data</a></li>
                         <li class=""><a href="#tab_3" data-toggle="tab" aria-expanded="false">Backup & Restore</a></li>
                         <li class=""><a href="#tab_4" data-toggle="tab" aria-expanded="false">Backup Master Soal</a></li>
+                        <li class=""><a href="#tab_ai" data-toggle="tab" aria-expanded="false"><i class="fa fa-robot text-purple"></i> Konfigurasi AI (Gemini)</a></li>
 
                     </ul>
                     <div class="tab-content">
@@ -302,6 +304,90 @@ $setting['header'] = str_replace('<br />', '', $setting['header']);
                                 </div>
                             </div>
                         </div>
+                        <div class="tab-pane" id="tab_ai">
+                            <div class="row">
+                                <div class="col-md-8">
+                                    <div class="box box-solid" style="border: 1px solid #d2d6de; border-radius: 4px;">
+                                        <div class="box-header with-border bg-purple" style="border-radius: 4px 4px 0 0;">
+                                            <h3 class="box-title"><i class="fa fa-robot"></i> Konfigurasi Google Gemini AI</h3>
+                                        </div>
+                                        <form id="formpengaturan_ai" method="post">
+                                            <div class="box-body">
+                                                <div class="form-group">
+                                                    <label><i class="fa fa-toggle-on"></i> Status Fitur AI</label>
+                                                    <div style="padding: 10px 15px; background: #f9f9f9; border-radius: 4px; border: 1px solid #e1e1e1;">
+                                                        <label class="radio-inline" style="font-weight: 600; margin-right: 25px;">
+                                                            <input type="radio" name="gemini_status" value="1" <?= ($ai_set['status'] == 1) ? 'checked' : '' ?>>
+                                                            <span class="label label-success" style="font-size: 11px; padding: 4px 8px;"><i class="fa fa-check"></i> AKTIF (ON)</span> &nbsp; Fitur analisis soal AI aktif
+                                                        </label>
+                                                        <label class="radio-inline" style="font-weight: 600;">
+                                                            <input type="radio" name="gemini_status" value="0" <?= ($ai_set['status'] == 0) ? 'checked' : '' ?>>
+                                                            <span class="label label-danger" style="font-size: 11px; padding: 4px 8px;"><i class="fa fa-times"></i> NONAKTIF (OFF)</span> &nbsp; Matikan analisis AI
+                                                        </label>
+                                                    </div>
+                                                </div>
+
+                                                <div class="form-group">
+                                                    <label><i class="fa fa-key"></i> Google Gemini API Key <span class="text-danger">*</span></label>
+                                                    <div class="input-group">
+                                                        <input type="password" name="gemini_api_key" id="gemini_api_key" value="<?= htmlspecialchars($ai_set['api_key'], ENT_QUOTES) ?>" class="form-control" placeholder="Masukkan Gemini API Key (AIzaSy...)" required>
+                                                        <span class="input-group-btn">
+                                                            <button type="button" class="btn btn-default btn-flat" id="btn-toggle-key" title="Tampilkan/Sembunyikan Key"><i class="fa fa-eye" id="icon-eye"></i></button>
+                                                        </span>
+                                                    </div>
+                                                    <small class="text-muted">
+                                                        Dapatkan API Key gratis di <a href="https://aistudio.google.com/app/apikey" target="_blank" class="text-primary" style="font-weight: 600;"><i class="fa fa-external-link"></i> Google AI Studio</a>.
+                                                    </small>
+                                                </div>
+
+                                                <div class="form-group">
+                                                    <label><i class="fa fa-microchip"></i> Model Gemini AI</label>
+                                                    <select name="gemini_model" id="gemini_model" class="form-control" required>
+                                                        <option value="gemini-2.5-flash" <?= ($ai_set['model'] == 'gemini-2.5-flash') ? 'selected' : '' ?>>gemini-2.5-flash (Direkomendasikan - Paling Cepat, Akurat & Terbaru)</option>
+                                                        <option value="gemini-2.0-flash" <?= ($ai_set['model'] == 'gemini-2.0-flash') ? 'selected' : '' ?>>gemini-2.0-flash (Sangat Cepat & Stabil)</option>
+                                                        <option value="gemini-1.5-flash" <?= ($ai_set['model'] == 'gemini-1.5-flash') ? 'selected' : '' ?>>gemini-1.5-flash (Ringan & Hemat Kuota)</option>
+                                                        <option value="gemini-1.5-pro" <?= ($ai_set['model'] == 'gemini-1.5-pro') ? 'selected' : '' ?>>gemini-1.5-pro (Penalaran Mendalam / Kompleks)</option>
+                                                    </select>
+                                                    <small class="text-muted">Model <b>flash</b> memberikan respons tercepat dan kuota gratis harian tinggi.</small>
+                                                </div>
+
+                                                <div class="form-group">
+                                                    <label><i class="fa fa-commenting-o"></i> Instruksi Tambahan / Prompt Khusus (Opsional)</label>
+                                                    <textarea name="gemini_prompt" id="gemini_prompt" class="form-control" rows="3" placeholder="Instruksi kustom untuk validator AI (kosongkan jika ingin memakai default sistem)..."><?= htmlspecialchars($ai_set['prompt'], ENT_QUOTES) ?></textarea>
+                                                </div>
+                                            </div>
+                                            <div class="box-footer">
+                                                <button type="submit" class="btn btn-flat btn-success" id="btn-save-ai"><i class="fa fa-save"></i> Simpan Konfigurasi AI</button>
+                                                <button type="button" id="btn-test-ai" class="btn btn-flat btn-primary pull-right"><i class="fa fa-bolt"></i> Test Koneksi AI</button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                    <div id="hasil-test-ai" style="display: none; margin-top: 15px;"></div>
+                                </div>
+
+                                <div class="col-md-4">
+                                    <div class="box box-solid" style="border: 1px solid #d2d6de; border-radius: 4px;">
+                                        <div class="box-header with-border">
+                                            <h3 class="box-title"><i class="fa fa-info-circle text-info"></i> Petunjuk Setup</h3>
+                                        </div>
+                                        <div class="box-body" style="font-size: 13px; line-height: 1.6;">
+                                            <ol style="padding-left: 18px; margin-bottom: 12px;">
+                                                <li>Kunjungi situs <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a>.</li>
+                                                <li>Login dengan akun Google, lalu klik tombol <b>"Create API Key"</b>.</li>
+                                                <li>Salin API Key yang diawali dengan <code>AIzaSy...</code> dan tempelkan ke form di samping.</li>
+                                                <li>Pilih model (disarankan <b>gemini-2.5-flash</b>).</li>
+                                                <li>Klik <b>Test Koneksi AI</b> untuk verifikasi.</li>
+                                                <li>Klik <b>Simpan Konfigurasi AI</b>.</li>
+                                            </ol>
+                                            <div class="callout callout-info" style="margin-bottom: 0; padding: 10px 12px;">
+                                                <i class="fa fa-magic"></i> <b>Analisis Bank Soal:</b><br>
+                                                Buka menu <b>Bank Soal</b> lalu klik tombol <b><i class="fa fa-robot"></i> Analisis AI</b> untuk memeriksa kesesuaian soal dan kunci jawaban.
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
 
                     </div>
                 </div>
@@ -416,5 +502,133 @@ $setting['header'] = str_replace('<br />', '', $setting['header']);
             }
         });
         return false;
+    });
+
+    // Toggle show/hide API Key
+    $('#btn-toggle-key').click(function() {
+        var input = $('#gemini_api_key');
+        var icon = $('#icon-eye');
+        if (input.attr('type') === 'password') {
+            input.attr('type', 'text');
+            icon.removeClass('fa-eye').addClass('fa-eye-slash');
+        } else {
+            input.attr('type', 'password');
+            icon.removeClass('fa-eye-slash').addClass('fa-eye');
+        }
+    });
+
+    // Simpan Konfigurasi AI
+    $('#formpengaturan_ai').submit(function(e) {
+        e.preventDefault();
+        var btn = $('#btn-save-ai');
+        var origHtml = btn.html();
+        btn.html('<i class="fa fa-spinner fa-spin"></i> Menyimpan...').prop('disabled', true);
+
+        $.ajax({
+            type: 'POST',
+            url: 'mod_setting/crud_setting.php?pg=setting_ai',
+            data: $(this).serialize(),
+            dataType: 'json',
+            success: function(res) {
+                btn.html(origHtml).prop('disabled', false);
+                if (res.status === 'success') {
+                    iziToast.success({
+                        title: 'Berhasil!',
+                        message: res.message,
+                        position: 'topRight'
+                    });
+                } else {
+                    iziToast.error({
+                        title: 'Gagal!',
+                        message: res.message,
+                        position: 'topRight'
+                    });
+                }
+            },
+            error: function(xhr) {
+                btn.html(origHtml).prop('disabled', false);
+                iziToast.error({
+                    title: 'Error!',
+                    message: 'Terjadi kesalahan komunikasi dengan server: ' + xhr.statusText,
+                    position: 'topRight'
+                });
+            }
+        });
+        return false;
+    });
+
+    // Test Koneksi AI
+    $('#btn-test-ai').click(function() {
+        var btn = $(this);
+        var origHtml = btn.html();
+        var apiKey = $('#gemini_api_key').val().trim();
+        var model = $('#gemini_model').val();
+        var container = $('#hasil-test-ai');
+
+        if (!apiKey) {
+            iziToast.warning({
+                title: 'Perhatian',
+                message: 'Masukkan Gemini API Key terlebih dahulu.',
+                position: 'topRight'
+            });
+            $('#gemini_api_key').focus();
+            return;
+        }
+
+        btn.html('<i class="fa fa-spinner fa-spin"></i> Menguji...').prop('disabled', true);
+        container.hide().html('');
+
+        $.ajax({
+            type: 'POST',
+            url: 'mod_setting/crud_setting.php?pg=test_gemini',
+            data: {
+                gemini_api_key: apiKey,
+                gemini_model: model
+            },
+            dataType: 'json',
+            success: function(res) {
+                btn.html(origHtml).prop('disabled', false);
+                if (res.status === 'success') {
+                    iziToast.success({
+                        title: 'Sukses!',
+                        message: 'Koneksi ke Gemini AI berhasil terhubung!',
+                        position: 'topRight'
+                    });
+                    container.html(
+                        '<div class="alert alert-success" style="border-radius: 4px;">' +
+                        '<h4><i class="icon fa fa-check"></i> ' + res.message + '</h4>' +
+                        '<p><b>Model:</b> ' + res.model + '</p>' +
+                        '<p><b>Respons AI:</b> <i>"' + res.reply + '"</i></p>' +
+                        '</div>'
+                    ).slideDown();
+                } else {
+                    iziToast.error({
+                        title: 'Koneksi Gagal',
+                        message: res.message,
+                        position: 'topRight'
+                    });
+                    container.html(
+                        '<div class="alert alert-danger" style="border-radius: 4px;">' +
+                        '<h4><i class="icon fa fa-ban"></i> Uji Koneksi Gagal</h4>' +
+                        '<p>' + res.message + '</p>' +
+                        '</div>'
+                    ).slideDown();
+                }
+            },
+            error: function(xhr) {
+                btn.html(origHtml).prop('disabled', false);
+                iziToast.error({
+                    title: 'Error',
+                    message: 'Gagal menghubungi endpoint: ' + xhr.statusText,
+                    position: 'topRight'
+                });
+                container.html(
+                    '<div class="alert alert-danger" style="border-radius: 4px;">' +
+                    '<h4><i class="icon fa fa-ban"></i> Error Sistem</h4>' +
+                    '<p>HTTP Error ' + xhr.status + ': ' + xhr.statusText + '</p>' +
+                    '</div>'
+                ).slideDown();
+            }
+        });
     });
 </script>
