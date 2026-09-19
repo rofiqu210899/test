@@ -13,6 +13,7 @@ if ($ac == '') :
                     <h3 class='box-title'><i class='fa fa-briefcase'></i> Data Bank Soal</h3>
                     <div class='box-tools pull-right '>
                         <?php if ($setting['server'] == 'pusat') : ?>
+                            <button type='button' id='btn-analisis-semua-ai' class='btn btn-sm bg-purple btn-flat' style='margin-right: 5px;'><i class='fa fa-cubes'></i> <span class='hidden-xs'>Analisis Semua Kelas (AI)</span></button>
                             <button id='btnhapusbank' class='btn btn-sm btn-danger'><i class='fa fa-trash'></i> <span class='hidden-xs'>Hapus</span></button>
                             <button class='btn btn-sm btn-flat btn-success' data-toggle='modal' data-target='#tambahbanksoal'><i class='glyphicon glyphicon-plus'></i> <span class='hidden-xs'>Tambah Bank Soal</span></button>
                         <?php endif ?>
@@ -1297,6 +1298,7 @@ if ($ac == '') :
         $.ajax({
             type: 'POST',
             url: 'mod_banksoal/ajax_analisis_ai.php?action=analisis',
+            timeout: 300000,
             data: {
                 id_mapel: currentAiMapelId,
                 offset: offset,
@@ -1642,6 +1644,612 @@ if ($ac == '') :
         }
         processNext();
     });
+
+    // Hapus butir soal ganda dari modal single
+    $(document).on('click', '.btn-delete-dup', function() {
+        var btn = $(this);
+        var idSoal = btn.data('id');
+        var nomor = btn.data('nomor');
+        if (!confirm('Hapus butir soal ganda No. ' + nomor + ' dari database?')) return;
+        var origHtml = btn.html();
+        btn.html('<i class="fa fa-spinner fa-spin"></i>').prop('disabled', true);
+        $.ajax({
+            type: 'POST',
+            url: 'mod_banksoal/ajax_analisis_ai.php?action=hapus_soal',
+            data: { id_soal: idSoal },
+            dataType: 'json',
+            timeout: 60000,
+            success: function(res) {
+                if (res.status === 'success') {
+                    toastr.success('Butir soal ganda No. ' + nomor + ' berhasil dihapus!');
+                    $('#col-aksi-' + idSoal).html('<span class="text-muted" style="font-size: 11px;"><i class="fa fa-trash"></i> Terhapus</span>');
+                    $('#lbl-status-' + idSoal).removeClass('label-info').addClass('label-default').text('TERHAPUS');
+                    $('#row-soal-' + idSoal).css('opacity', '0.5');
+                    var curDup = parseInt($('#kpi-duplikat').text()) || 0;
+                    if (curDup > 0) {
+                        $('#kpi-duplikat').text(curDup - 1);
+                        $('#count-filter-duplikat').text(curDup - 1);
+                    }
+                } else {
+                    btn.html(origHtml).prop('disabled', false);
+                    toastr.error(res.message || 'Gagal menghapus soal.');
+                }
+            },
+            error: function(xhr) {
+                btn.html(origHtml).prop('disabled', false);
+                toastr.error('Error komunikasi: ' + xhr.statusText);
+            }
+        });
+    });
+
+    // ============================================================
+    // JAVASCRIPT: MASTER AUDIT SEMUA KELAS / BANK SOAL (AI)
+    // ============================================================
+    var masterBankList = [];
+    var masterBankQueue = [];
+    var currentQueueIndex = 0;
+    var masterTotalQuestions = 0;
+    var masterProcessedCount = 0;
+    var masterAiResults = [];
+    var masterAiIsCancelled = false;
+    var masterAiDelay = 2.0;
+    var masterAiBatchSize = 15;
+
+    $(document).on('click', '#btn-analisis-semua-ai', function() {
+        $('#modal-analisis-semua-ai').modal('show');
+        $('#all-ai-error-container').hide().html('');
+        $('#all-ai-pre-analysis').hide();
+        $('#all-ai-loading-container').hide();
+        $('#all-ai-result-container').hide();
+
+        $('#all-ai-progress-status').text('Memuat Daftar Bank Soal...');
+        $('#all-ai-progress-detail').text('Mengambil data seluruh bank soal dan kelas...');
+        $('#all-ai-loading-container').show();
+        $('#all-ai-master-progress-bar').css('width', '0%').text('0%');
+        $('#all-ai-bank-progress-bar').css('width', '0%').text('0%');
+
+        $.ajax({
+            type: 'GET',
+            url: 'mod_banksoal/ajax_analisis_ai.php?action=list_mapel_ready',
+            dataType: 'json',
+            timeout: 60000,
+            success: function(res) {
+                $('#all-ai-loading-container').hide();
+                if (res.status === 'success') {
+                    if (!res.has_api_key || !res.ai_active) {
+                        $('#all-ai-error-container').html(
+                            '<div class="callout callout-warning" style="background:#fff; border-left-color:#f39c12;">' +
+                            '<h4><i class="fa fa-warning"></i> Fitur AI Belum Siap</h4>' +
+                            '<p>Pastikan API Key AI telah diisi dan status AI diaktifkan di menu Pengaturan.</p>' +
+                            '<p><a href="?pg=setting#tab_ai" class="btn btn-sm btn-warning btn-flat"><i class="fa fa-cog"></i> Buka Pengaturan AI</a></p>' +
+                            '</div>'
+                        ).show();
+                        return;
+                    }
+
+                    masterBankList = res.list || [];
+                    masterAiDelay = parseFloat(res.ai_delay) || 2.0;
+                    masterAiBatchSize = parseInt(res.ai_batch_size) || 15;
+
+                    $('#all-ai-modal-provider').text(res.ai_provider || 'gemini');
+                    $('#all-ai-modal-model').text(res.ai_model || '-');
+                    $('#all-ai-total-bank-count').text(masterBankList.length);
+                    $('#all-ai-total-soal-count').text(res.grand_total_soal || 0);
+
+                    if (masterBankList.length === 0) {
+                        $('#all-ai-error-container').html(
+                            '<div class="callout callout-info" style="background:#fff; border-left-color:#00c0ef;">' +
+                            '<h4><i class="fa fa-info-circle"></i> Tidak Ada Soal</h4>' +
+                            '<p>Tidak ditemukan bank soal dengan butir soal pilihan ganda untuk dianalisis.</p>' +
+                            '</div>'
+                        ).show();
+                        return;
+                    }
+
+                    // Render bank list in table
+                    var tbody = $('#tbody-all-bank-list');
+                    tbody.empty();
+                    var filterSelect = $('#all-ai-filter-bank');
+                    filterSelect.html('<option value="all">Semua Bank Soal / Kelas</option>');
+
+                    masterBankList.forEach(function(b, idx) {
+                        tbody.append(
+                            '<tr>' +
+                            '<td style="text-align: center;"><input type="checkbox" class="cb-select-bank" data-id="' + b.id_mapel + '" checked></td>' +
+                            '<td style="text-align: center;"><span class="label label-primary" style="font-size: 11px;">Kelas ' + (b.level || '-') + '</span></td>' +
+                            '<td><b>' + b.kode + '</b></td>' +
+                            '<td>' + b.nama + '</td>' +
+                            '<td style="text-align: center;"><span class="badge bg-purple">' + b.total_soal + ' soal</span></td>' +
+                            '</tr>'
+                        );
+                        filterSelect.append('<option value="' + b.id_mapel + '">[' + (b.level || '-') + '] ' + b.nama + ' (' + b.kode + ')</option>');
+                    });
+
+                    updateSelectedBankSummary();
+                    $('#all-ai-pre-analysis').show();
+                } else {
+                    $('#all-ai-error-container').html('<div class="alert alert-danger"><i class="fa fa-ban"></i> ' + (res.message || 'Gagal memuat bank soal.') + '</div>').show();
+                }
+            },
+            error: function(xhr) {
+                $('#all-ai-loading-container').hide();
+                $('#all-ai-error-container').html('<div class="alert alert-danger"><i class="fa fa-ban"></i> Gagal menghubungi server: ' + xhr.statusText + '</div>').show();
+            }
+        });
+    });
+
+    function updateSelectedBankSummary() {
+        var checkedBoxes = $('.cb-select-bank:checked');
+        var selectedBanks = 0;
+        var selectedSoal = 0;
+        checkedBoxes.each(function() {
+            var id = $(this).data('id');
+            var found = masterBankList.find(function(item) { return item.id_mapel == id; });
+            if (found) {
+                selectedBanks++;
+                selectedSoal += found.total_soal;
+            }
+        });
+        $('#all-ai-selected-summary').text(selectedBanks + ' Bank Soal (' + selectedSoal + ' Soal) Terpilih');
+        $('#btn-mulai-semua-ai').prop('disabled', selectedBanks === 0);
+    }
+
+    $(document).on('change', '#all-ai-check-all', function() {
+        $('.cb-select-bank').prop('checked', $(this).prop('checked'));
+        updateSelectedBankSummary();
+    });
+
+    $(document).on('change', '.cb-select-bank', function() {
+        var totalBoxes = $('.cb-select-bank').length;
+        var checkedBoxes = $('.cb-select-bank:checked').length;
+        $('#all-ai-check-all').prop('checked', totalBoxes === checkedBoxes);
+        updateSelectedBankSummary();
+    });
+
+    $(document).on('click', '#btn-mulai-semua-ai, #btn-all-reanalisis', function() {
+        masterBankQueue = [];
+        $('.cb-select-bank:checked').each(function() {
+            var id = $(this).data('id');
+            var found = masterBankList.find(function(item) { return item.id_mapel == id; });
+            if (found) masterBankQueue.push(found);
+        });
+
+        if (masterBankQueue.length === 0) {
+            toastr.warning('Pilih minimal satu bank soal untuk dianalisis.');
+            return;
+        }
+
+        masterTotalQuestions = 0;
+        masterBankQueue.forEach(function(b) { masterTotalQuestions += b.total_soal; });
+
+        currentQueueIndex = 0;
+        masterProcessedCount = 0;
+        masterAiResults = [];
+        masterAiIsCancelled = false;
+
+        $('#all-ai-pre-analysis').hide();
+        $('#all-ai-result-container').hide();
+        $('#all-ai-error-container').hide().html('');
+        $('#all-ai-loading-container').show();
+
+        $('#all-ai-master-progress-bar').css('width', '0%').text('0%');
+        $('#all-ai-bank-progress-bar').css('width', '0%').text('0%');
+        $('#all-ai-master-progress-text').text('0 / ' + masterTotalQuestions + ' Soal (0%)');
+
+        processMasterQueue();
+    });
+
+    $(document).on('click', '#btn-all-ai-cancel', function() {
+        if (confirm('Hentikan proses antrian? Hasil pemeriksaan soal yang telah selesai akan tetap ditampilkan.')) {
+            masterAiIsCancelled = true;
+            $('#all-ai-loading-container').hide();
+            renderAllAiResults();
+        }
+    });
+
+    function processMasterQueue() {
+        if (masterAiIsCancelled) return;
+
+        if (currentQueueIndex >= masterBankQueue.length) {
+            $('#all-ai-master-progress-bar').css('width', '100%').text('100%');
+            $('#all-ai-bank-progress-bar').css('width', '100%').text('100%');
+            $('#all-ai-progress-status').text('Analisis Seluruh Kelas Selesai!');
+            $('#all-ai-progress-detail').text('Menyusun ringkasan hasil audit...');
+            setTimeout(function() {
+                $('#all-ai-loading-container').hide();
+                renderAllAiResults();
+                toastr.success('Analisis kualitas soal seluruh kelas selesai!');
+            }, 600);
+            return;
+        }
+
+        var bank = masterBankQueue[currentQueueIndex];
+        var bankNum = currentQueueIndex + 1;
+        var totalBanks = masterBankQueue.length;
+
+        $('#all-ai-progress-status').html('Menganalisis Bank Soal <b>' + bankNum + ' dari ' + totalBanks + '</b>: ' + bank.nama + ' (Kelas ' + (bank.level || '-') + ')');
+        $('#all-ai-current-bank-label').html('<b>' + bank.nama + '</b> [' + bank.kode + '] &bull; Kelas ' + (bank.level || '-') + ' (' + bank.total_soal + ' Soal)');
+        $('#all-ai-bank-progress-bar').css('width', '0%').text('0%');
+        $('#all-ai-current-bank-progress-text').text('0 / ' + bank.total_soal + ' (0%)');
+
+        runMasterBankBatch(bank, 0, masterAiBatchSize, 0);
+    }
+
+    function runMasterBankBatch(bank, offset, limit, retryCount) {
+        if (masterAiIsCancelled) return;
+
+        limit = limit || masterAiBatchSize || 15;
+        retryCount = retryCount || 0;
+        var endRange = Math.min(offset + limit, bank.total_soal);
+
+        $('#all-ai-progress-detail').html('Menganalisis butir soal <b>' + (offset + 1) + ' s/d ' + endRange + '</b> dari ' + bank.total_soal + ' soal (' + bank.nama + ')...');
+
+        $.ajax({
+            type: 'POST',
+            url: 'mod_banksoal/ajax_analisis_ai.php?action=analisis',
+            timeout: 300000,
+            data: {
+                id_mapel: bank.id_mapel,
+                offset: offset,
+                limit: limit
+            },
+            dataType: 'json',
+            success: function(res) {
+                if (masterAiIsCancelled) return;
+
+                if (res.status === 'success') {
+                    if (res.hasil && res.hasil.length > 0) {
+                        res.hasil.forEach(function(item) {
+                            item.id_mapel = bank.id_mapel;
+                            item.kode_bank = bank.kode;
+                            item.nama_mapel = bank.nama;
+                            item.level = bank.level;
+                            masterAiResults.push(item);
+                        });
+                        masterProcessedCount += res.hasil.length;
+                    }
+
+                    var bankProg = Math.min(100, Math.round((res.processed_total / bank.total_soal) * 100));
+                    $('#all-ai-bank-progress-bar').css('width', bankProg + '%').text(bankProg + '%');
+                    $('#all-ai-current-bank-progress-text').text(res.processed_total + ' / ' + bank.total_soal + ' (' + bankProg + '%)');
+
+                    var masterProg = masterTotalQuestions > 0 ? Math.min(100, Math.round((masterProcessedCount / masterTotalQuestions) * 100)) : 100;
+                    $('#all-ai-master-progress-bar').css('width', masterProg + '%').text(masterProg + '%');
+                    $('#all-ai-master-progress-text').text(masterProcessedCount + ' / ' + masterTotalQuestions + ' Soal (' + masterProg + '%)');
+
+                    if (!res.is_finished && res.processed_total < bank.total_soal) {
+                        var waitSec = masterAiDelay;
+                        $('#all-ai-progress-detail').html('<i class="fa fa-clock-o text-purple"></i> Jeda anti-RPM: <b>' + waitSec.toFixed(1) + 's</b> sebelum batch berikutnya...');
+                        var timer = setInterval(function() {
+                            if (masterAiIsCancelled) { clearInterval(timer); return; }
+                            waitSec = Math.max(0, waitSec - 0.5);
+                            if (waitSec <= 0) {
+                                clearInterval(timer);
+                                runMasterBankBatch(bank, res.processed_total, limit, 0);
+                            } else {
+                                $('#all-ai-progress-detail').html('<i class="fa fa-clock-o text-purple"></i> Jeda anti-RPM: <b>' + waitSec.toFixed(1) + 's</b> sebelum batch berikutnya...');
+                            }
+                        }, 500);
+                    } else {
+                        currentQueueIndex++;
+                        var waitBankSec = Math.max(1.5, masterAiDelay);
+                        $('#all-ai-progress-detail').html('<span class="text-green"><i class="fa fa-check"></i> ' + bank.nama + ' selesai!</span> Jeda <b>' + waitBankSec.toFixed(1) + 's</b> sebelum bank berikutnya...');
+                        setTimeout(function() {
+                            processMasterQueue();
+                        }, waitBankSec * 1000);
+                    }
+                } else if (res.code === 'RATE_LIMIT' && retryCount < 3) {
+                    var retryWait = res.retry_after || 12;
+                    $('#all-ai-progress-detail').html('<span class="text-yellow"><i class="fa fa-exclamation-triangle"></i> ' + res.message + ' (Percobaan ' + (retryCount + 1) + '/3)... Menunggu <b>' + retryWait + 's</b></span>');
+                    var retryTimer = setInterval(function() {
+                        if (masterAiIsCancelled) { clearInterval(retryTimer); return; }
+                        retryWait--;
+                        if (retryWait <= 0) {
+                            clearInterval(retryTimer);
+                            runMasterBankBatch(bank, offset, limit, retryCount + 1);
+                        } else {
+                            $('#all-ai-progress-detail').html('<span class="text-yellow"><i class="fa fa-exclamation-triangle"></i> Batas RPM/TPM. Mengulang dalam <b>' + retryWait + 's</b>...</span>');
+                        }
+                    }, 1000);
+                } else {
+                    toastr.error('Bank ' + bank.nama + ' mengalami kendala: ' + (res.message || 'Error'));
+                    currentQueueIndex++;
+                    setTimeout(function() { processMasterQueue(); }, 1500);
+                }
+            },
+            error: function(xhr) {
+                if (retryCount < 2) {
+                    $('#all-ai-progress-detail').html('<span class="text-yellow"><i class="fa fa-refresh fa-spin"></i> Koneksi timeout. Mengulang batch dalam 5 detik (Percobaan ' + (retryCount + 1) + '/2)...</span>');
+                    setTimeout(function() {
+                        runMasterBankBatch(bank, offset, limit, retryCount + 1);
+                    }, 5000);
+                } else {
+                    toastr.error('Koneksi terputus untuk bank ' + bank.nama + '. Melanjutkan bank berikutnya.');
+                    currentQueueIndex++;
+                    setTimeout(function() { processMasterQueue(); }, 1500);
+                }
+            }
+        });
+    }
+
+    function renderAllAiResults() {
+        try {
+            var total = masterAiResults.length;
+            var sesuai = 0;
+            var salah = 0;
+            var tidak_logis = 0;
+            var cacat_acak = 0;
+            var duplikat = 0;
+
+            var tbody = $('#tbody-all-hasil-ai');
+            tbody.empty();
+
+            masterAiResults.forEach(function(item, idx) {
+                var st = item.status;
+                if (st === 'SESUAI') sesuai++;
+                else if (st === 'KUNCI_SALAH') salah++;
+                else if (st === 'CACAT_ACAK') cacat_acak++;
+                else if (st === 'DUPLIKAT') duplikat++;
+                else if (st === 'TIDAK_LOGIS' || st === 'AMBIGU') {
+                    tidak_logis++;
+                    st = 'TIDAK_LOGIS';
+                } else {
+                    sesuai++;
+                    st = 'SESUAI';
+                }
+
+                var badgeClass = 'label-success';
+                var badgeStyle = '';
+                var badgeText = '<i class="fa fa-check-circle"></i> SESUAI';
+
+                if (st === 'KUNCI_SALAH') {
+                    badgeClass = 'label-danger';
+                    badgeText = '<i class="fa fa-times-circle"></i> KUNCI SALAH';
+                } else if (st === 'CACAT_ACAK') {
+                    badgeClass = 'label-default';
+                    badgeStyle = 'background-color: #605ca8; color: #fff;';
+                    badgeText = '<i class="fa fa-random"></i> CACAT ACAK';
+                } else if (st === 'DUPLIKAT') {
+                    badgeClass = 'label-info';
+                    badgeStyle = 'background-color: #008080; color: #fff;';
+                    badgeText = '<i class="fa fa-clone"></i> SOAL GANDA';
+                } else if (st === 'TIDAK_LOGIS') {
+                    badgeClass = 'label-warning';
+                    badgeText = '<i class="fa fa-exclamation-triangle"></i> TIDAK LOGIS';
+                }
+
+                var aksiHtml = '<span class="text-muted" style="font-size: 11px;">-</span>';
+                if (st === 'KUNCI_SALAH' && item.kunci_ai && item.kunci_ai !== item.kunci_cbt) {
+                    aksiHtml = '<button type="button" class="btn btn-xs btn-danger btn-flat btn-apply-key-all" data-id="' + item.id_soal + '" data-kunci="' + item.kunci_ai + '" data-nomor="' + item.nomor + '" data-mapel="' + (item.nama_mapel || '') + '" title="Terapkan kunci ' + item.kunci_ai + '"><i class="fa fa-check"></i> Ubah ke <b>' + item.kunci_ai + '</b></button>';
+                } else if (st === 'DUPLIKAT') {
+                    aksiHtml = '<button type="button" class="btn btn-xs btn-danger btn-flat btn-hapus-soal-all" data-id="' + item.id_soal + '" data-nomor="' + item.nomor + '" data-mapel="' + (item.nama_mapel || '') + '" title="Hapus butir soal ganda ini"><i class="fa fa-trash"></i> Hapus Ganda</button>';
+                }
+
+                var rowClass = '';
+                if (st === 'KUNCI_SALAH') rowClass = 'danger';
+                else if (st === 'CACAT_ACAK') rowClass = 'warning';
+                else if (st === 'DUPLIKAT') rowClass = 'info';
+
+                var cleanSnippet = (item.soal_snippet || item.soal_preview || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                var cleanAlasan = (item.alasan || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+                tbody.append(
+                    '<tr class="' + rowClass + ' row-all-ai" id="row-all-soal-' + item.id_soal + '" data-status="' + st + '" data-mapel-id="' + item.id_mapel + '">' +
+                    '<td style="text-align: center; vertical-align: middle;">' + (idx + 1) + '</td>' +
+                    '<td style="vertical-align: middle;"><span class="label label-primary" style="font-size: 10px;">Kls ' + (item.level || '-') + '</span> <small style="display:block; font-weight:600; color:#333;">' + item.nama_mapel + '</small></td>' +
+                    '<td style="text-align: center; font-weight: bold; vertical-align: middle;">#' + item.nomor + '</td>' +
+                    '<td style="vertical-align: middle;">' + cleanSnippet + '</td>' +
+                    '<td style="text-align: center; font-weight: bold; font-size: 14px; vertical-align: middle;" id="lbl-all-cbt-' + item.id_soal + '">' + (item.kunci_sekarang || item.kunci_cbt || '-') + '</td>' +
+                    '<td style="text-align: center; font-weight: bold; font-size: 14px; color: #605ca8; vertical-align: middle;">' + (item.kunci_ai || '-') + '</td>' +
+                    '<td style="text-align: center; vertical-align: middle;"><span class="label ' + badgeClass + '" style="' + badgeStyle + '" id="lbl-all-status-' + item.id_soal + '">' + badgeText + '</span></td>' +
+                    '<td style="vertical-align: middle; font-size: 12px; line-height: 1.4;">' + cleanAlasan + '</td>' +
+                    '<td style="text-align: center; vertical-align: middle;" id="col-all-aksi-' + item.id_soal + '">' + aksiHtml + '</td>' +
+                    '</tr>'
+                );
+            });
+
+            $('#all-kpi-total').text(total);
+            $('#all-kpi-sesuai').text(sesuai);
+            $('#all-kpi-salah').text(salah);
+            $('#all-kpi-logis').text(tidak_logis);
+            $('#all-kpi-acak').text(cacat_acak);
+            $('#all-kpi-duplikat').text(duplikat);
+
+            $('#all-count-filter-all').text(total);
+            $('#all-count-filter-salah').text(salah);
+            $('#all-count-filter-logis').text(tidak_logis);
+            $('#all-count-filter-acak').text(cacat_acak);
+            $('#all-count-filter-duplikat').text(duplikat);
+            $('#all-count-filter-sesuai').text(sesuai);
+
+            if (salah > 0) {
+                $('#btn-all-terapkan-semua-ai').show();
+            } else {
+                $('#btn-all-terapkan-semua-ai').hide();
+            }
+
+            $('#all-ai-filter-group button').removeClass('active');
+            $('#all-ai-filter-group button[data-filter="all"]').addClass('active');
+            $('#all-ai-filter-bank').val('all');
+
+            $('#all-ai-result-container').show();
+        } catch (e) {
+            console.error('Error rendering all AI results:', e);
+            toastr.error('Gagal menampilkan hasil analisis: ' + e.message);
+        }
+    }
+
+    function filterAllAiTable() {
+        var statusFilter = $('#all-ai-filter-group button.active').data('filter') || 'all';
+        var bankFilter = $('#all-ai-filter-bank').val() || 'all';
+
+        $('.row-all-ai').each(function() {
+            var rowStatus = $(this).data('status');
+            var rowBank = $(this).data('mapel-id');
+
+            var matchStatus = (statusFilter === 'all' || rowStatus === statusFilter);
+            var matchBank = (bankFilter === 'all' || rowBank == bankFilter);
+
+            if (matchStatus && matchBank) {
+                $(this).show();
+            } else {
+                $(this).hide();
+            }
+        });
+    }
+
+    $(document).on('click', '#all-ai-filter-group button', function() {
+        $('#all-ai-filter-group button').removeClass('active');
+        $(this).addClass('active');
+        filterAllAiTable();
+    });
+
+    $(document).on('change', '#all-ai-filter-bank', function() {
+        filterAllAiTable();
+    });
+
+    $(document).on('click', '.btn-apply-key-all', function() {
+        var btn = $(this);
+        var idSoal = btn.data('id');
+        var kunciBaru = btn.data('kunci');
+        var nomor = btn.data('nomor');
+        var mapel = btn.data('mapel');
+
+        var origHtml = btn.html();
+        btn.html('<i class="fa fa-spinner fa-spin"></i>').prop('disabled', true);
+
+        $.ajax({
+            type: 'POST',
+            url: 'mod_banksoal/ajax_analisis_ai.php?action=update_kunci',
+            data: { id_soal: idSoal, kunci_baru: kunciBaru },
+            dataType: 'json',
+            timeout: 60000,
+            success: function(res) {
+                if (res.status === 'success') {
+                    toastr.success('[' + mapel + '] Kunci No. ' + nomor + ' diubah menjadi ' + kunciBaru);
+                    $('#lbl-all-cbt-' + idSoal).text(kunciBaru);
+                    $('#lbl-all-status-' + idSoal).removeClass('label-danger label-warning').addClass('label-success').text('SESUAI (DIUBAH)');
+                    $('#col-all-aksi-' + idSoal).html('<span class="text-green" style="font-size: 11px;"><i class="fa fa-check"></i> Diperbarui</span>');
+                    $('#row-all-soal-' + idSoal).attr('data-status', 'SESUAI').removeClass('danger');
+
+                    var curSalah = parseInt($('#all-kpi-salah').text()) || 0;
+                    var curSesuai = parseInt($('#all-kpi-sesuai').text()) || 0;
+                    if (curSalah > 0) {
+                        $('#all-kpi-salah').text(curSalah - 1);
+                        $('#all-count-filter-salah').text(curSalah - 1);
+                    }
+                    $('#all-kpi-sesuai').text(curSesuai + 1);
+                    $('#all-count-filter-sesuai').text(curSesuai + 1);
+
+                    if (curSalah - 1 <= 0) {
+                        $('#btn-all-terapkan-semua-ai').hide();
+                    }
+                } else {
+                    btn.html(origHtml).prop('disabled', false);
+                    toastr.error(res.message || 'Gagal mengubah kunci jawaban.');
+                }
+            },
+            error: function(xhr) {
+                btn.html(origHtml).prop('disabled', false);
+                toastr.error('Error komunikasi: ' + xhr.statusText);
+            }
+        });
+    });
+
+    $(document).on('click', '.btn-hapus-soal-all', function() {
+        var btn = $(this);
+        var idSoal = btn.data('id');
+        var nomor = btn.data('nomor');
+        var mapel = btn.data('mapel');
+
+        if (!confirm('Hapus butir soal ganda No. ' + nomor + ' (' + mapel + ') dari database?')) return;
+
+        var origHtml = btn.html();
+        btn.html('<i class="fa fa-spinner fa-spin"></i>').prop('disabled', true);
+
+        $.ajax({
+            type: 'POST',
+            url: 'mod_banksoal/ajax_analisis_ai.php?action=hapus_soal',
+            data: { id_soal: idSoal },
+            dataType: 'json',
+            timeout: 60000,
+            success: function(res) {
+                if (res.status === 'success') {
+                    toastr.success('[' + mapel + '] Butir soal ganda No. ' + nomor + ' berhasil dihapus!');
+                    $('#col-all-aksi-' + idSoal).html('<span class="text-muted" style="font-size: 11px;"><i class="fa fa-trash"></i> Terhapus</span>');
+                    $('#lbl-all-status-' + idSoal).removeClass('label-info').addClass('label-default').text('TERHAPUS');
+                    $('#row-all-soal-' + idSoal).css('opacity', '0.5');
+
+                    var curDup = parseInt($('#all-kpi-duplikat').text()) || 0;
+                    if (curDup > 0) {
+                        $('#all-kpi-duplikat').text(curDup - 1);
+                        $('#all-count-filter-duplikat').text(curDup - 1);
+                    }
+                } else {
+                    btn.html(origHtml).prop('disabled', false);
+                    toastr.error(res.message || 'Gagal menghapus soal.');
+                }
+            },
+            error: function(xhr) {
+                btn.html(origHtml).prop('disabled', false);
+                toastr.error('Error komunikasi: ' + xhr.statusText);
+            }
+        });
+    });
+
+    $(document).on('click', '#btn-all-terapkan-semua-ai', function() {
+        var wrongButtons = $('.btn-apply-key-all:visible');
+        if (wrongButtons.length === 0) {
+            wrongButtons = $('.btn-apply-key-all');
+        }
+
+        if (wrongButtons.length === 0) {
+            toastr.info('Tidak ada kunci jawaban salah yang perlu diperbarui.');
+            return;
+        }
+
+        if (!confirm('Apakah Anda yakin ingin menerapkan semua (' + wrongButtons.length + ') kunci jawaban rekomendasi AI pada seluruh kelas terpilih?')) {
+            return;
+        }
+
+        var btnAll = $(this);
+        btnAll.html('<i class="fa fa-spinner fa-spin"></i> Menerapkan...').prop('disabled', true);
+
+        var idx = 0;
+        function processNextKey() {
+            if (idx >= wrongButtons.length) {
+                btnAll.html('<i class="fa fa-check"></i> Selesai Diterapkan').prop('disabled', true);
+                toastr.success('Semua kunci jawaban rekomendasi AI berhasil diterapkan ke seluruh bank soal!');
+                return;
+            }
+            var b = $(wrongButtons[idx]);
+            var idSoal = b.data('id');
+            var kunciBaru = b.data('kunci');
+
+            $.ajax({
+                type: 'POST',
+                url: 'mod_banksoal/ajax_analisis_ai.php?action=update_kunci',
+                data: { id_soal: idSoal, kunci_baru: kunciBaru },
+                dataType: 'json',
+                timeout: 60000,
+                success: function(res) {
+                    if (res.status === 'success') {
+                        $('#lbl-all-cbt-' + idSoal).text(kunciBaru);
+                        $('#lbl-all-status-' + idSoal).removeClass('label-danger').addClass('label-success').text('SESUAI');
+                        $('#col-all-aksi-' + idSoal).html('<span class="text-green" style="font-size: 11px;"><i class="fa fa-check"></i> Diperbarui</span>');
+                        $('#row-all-soal-' + idSoal).attr('data-status', 'SESUAI').removeClass('danger');
+                    }
+                    idx++;
+                    processNextKey();
+                },
+                error: function() {
+                    idx++;
+                    processNextKey();
+                }
+            });
+        }
+        processNextKey();
+    });
 </script>
 
 <!-- Modal Analisis AI -->
@@ -1777,6 +2385,206 @@ if ($ac == '') :
                                 </tr>
                             </thead>
                             <tbody id="tbody-hasil-ai"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer" style="background: #f4f5f9; padding: 12px 20px;">
+                <button type="button" class="btn btn-default btn-flat" data-dismiss="modal">Tutup</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Analisis Semua Kelas / Bank Soal (AI) -->
+<div class="modal fade" id="modal-analisis-semua-ai" tabindex="-1" role="dialog" aria-labelledby="modalAllAiTitle" aria-hidden="true" data-backdrop="static">
+    <div class="modal-dialog modal-lg" role="document" style="width: 95%; max-width: 1280px;">
+        <div class="modal-content" style="border-radius: 6px; overflow: hidden; box-shadow: 0 5px 30px rgba(0,0,0,0.3);">
+            <div class="modal-header bg-purple" style="padding: 14px 20px;">
+                <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close" style="color: #fff; opacity: 0.85; font-size: 24px;">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+                <h4 class="modal-title" id="modalAllAiTitle" style="color: #fff; font-weight: 600; margin: 0;">
+                    <i class="fa fa-cubes"></i> Audit Kualitas Soal Semua Kelas & Bank Soal (AI Assistant)
+                </h4>
+                <div style="font-size: 12px; color: #e9d5ff; margin-top: 4px;">
+                    Provider: <span class="badge bg-yellow" id="all-ai-modal-provider">-</span> &bull; Model AI: <b id="all-ai-modal-model">-</b> &bull; Total Bank Soal: <span class="badge bg-aqua" id="all-ai-total-bank-count">0</span> &bull; Total Soal: <span class="badge bg-green" id="all-ai-total-soal-count">0</span>
+                </div>
+            </div>
+
+            <div class="modal-body" style="padding: 20px; background: #fafafa;">
+                <div id="all-ai-error-container" style="display: none;"></div>
+
+                <!-- STATE 1: PRE-ANALYSIS / PILIH BANK SOAL -->
+                <div id="all-ai-pre-analysis" style="display: none;">
+                    <div class="callout callout-info" style="border-left-color: #605ca8; background: #fff; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); color: #333;">
+                        <h4 style="color: #605ca8; font-weight: 600;"><i class="fa fa-info-circle"></i> Audit Kualitas & Validasi Otomatis Seluruh Bank Soal</h4>
+                        <p style="margin-bottom: 5px;">Sistem AI akan mengaudit seluruh butir soal pilihan ganda di semua kelas secara berurutan:
+                            <strong>Kesesuaian Kunci Jawaban</strong>, <strong>Kelogisan Teks Soal & Pilihan</strong>, <strong>Cacat Anomali Acak</strong> (soal merujuk nomor lain yang membingungkan saat diacak), serta <strong>Pencegahan Soal Ganda / Duplikat</strong> (mencegah salah input berulang).
+                        </p>
+                        <p style="margin-bottom: 0; color: #777; font-size: 12px;">
+                            <i class="fa fa-shield"></i> Timeout request telah diperpanjang (5 menit per batch) dengan proteksi anti-RPM/TPM otomatis.
+                        </p>
+                    </div>
+
+                    <div class="box box-solid" style="border: 1px solid #d2d6de; border-radius: 4px; margin-bottom: 15px;">
+                        <div class="box-header with-border" style="background: #fdfdfd; padding: 10px 15px;">
+                            <h3 class="box-title" style="font-size: 14px; font-weight: 600;"><i class="fa fa-check-square-o"></i> Pilih Bank Soal yang Ingin Diaudit:</h3>
+                            <div class="box-tools pull-right">
+                                <label style="font-weight: normal; cursor: pointer; margin-bottom: 0; margin-right: 15px;">
+                                    <input type="checkbox" id="all-ai-check-all" checked> <b>Pilih Semua Kelas / Bank Soal</b>
+                                </label>
+                                <span class="badge bg-purple" id="all-ai-selected-summary">0 Bank Soal (0 Soal) Terpilih</span>
+                            </div>
+                        </div>
+                        <div class="box-body" style="padding: 0; max-height: 280px; overflow-y: auto;">
+                            <table class="table table-bordered table-hover table-striped" style="margin-bottom: 0; font-size: 13px;">
+                                <thead style="background: #f4f5f9; position: sticky; top: 0; z-index: 2;">
+                                    <tr>
+                                        <th style="width: 40px; text-align: center;"><i class="fa fa-check"></i></th>
+                                        <th style="width: 100px; text-align: center;">Kelas / Level</th>
+                                        <th style="width: 140px;">Kode Bank</th>
+                                        <th>Mata Pelajaran</th>
+                                        <th style="width: 120px; text-align: center;">Jumlah Soal PG</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tbody-all-bank-list"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="text-center" style="margin: 20px 0 10px 0;">
+                        <button type="button" class="btn btn-lg bg-purple btn-flat" id="btn-mulai-semua-ai" style="padding: 12px 35px; font-weight: 600; border-radius: 4px;">
+                            <i class="fa fa-play-circle"></i> Mulai Analisis Semua Kelas Sekarang
+                        </button>
+                    </div>
+                </div>
+
+                <!-- STATE 2: LOADING & QUEUE PROGRESS -->
+                <div id="all-ai-loading-container" style="display: none; padding: 25px 15px;">
+                    <div class="text-center" style="margin-bottom: 20px;">
+                        <i class="fa fa-robot fa-spin fa-3x text-purple" style="margin-bottom: 12px;"></i>
+                        <h4 id="all-ai-progress-status" style="font-weight: 600; color: #333; margin-top: 0;">Menganalisis Soal Semua Kelas dengan AI...</h4>
+                        <p class="text-muted" id="all-ai-progress-detail" style="font-size: 13px;">Menyiapkan antrian pemeriksaan bank soal...</p>
+                    </div>
+
+                    <!-- Progress Keseluruhan -->
+                    <div style="margin-bottom: 6px; display: flex; justify-content: space-between; font-size: 12px; font-weight: bold; color: #555;">
+                        <span>Progress Total Soal (Semua Bank Soal)</span>
+                        <span id="all-ai-master-progress-text">0 / 0 Soal (0%)</span>
+                    </div>
+                    <div class="progress progress-striped active" style="height: 24px; border-radius: 12px; margin-bottom: 15px; background: #e9ecef;">
+                        <div id="all-ai-master-progress-bar" class="progress-bar progress-bar-purple" role="progressbar" style="width: 0%; line-height: 24px; font-weight: bold; font-size: 12px; background-color: #605ca8;">0%</div>
+                    </div>
+
+                    <!-- Progress Bank Soal Saat Ini -->
+                    <div style="margin-bottom: 6px; display: flex; justify-content: space-between; font-size: 12px; color: #777;">
+                        <span id="all-ai-current-bank-label">Bank Soal Saat Ini: -</span>
+                        <span id="all-ai-current-bank-progress-text">0%</span>
+                    </div>
+                    <div class="progress" style="height: 14px; border-radius: 7px; margin-bottom: 15px; background: #e9ecef;">
+                        <div id="all-ai-bank-progress-bar" class="progress-bar progress-bar-success" role="progressbar" style="width: 0%; line-height: 14px; font-size: 10px;">0%</div>
+                    </div>
+
+                    <div class="text-center" style="margin-top: 15px;">
+                        <button type="button" class="btn btn-sm btn-default btn-flat" id="btn-all-ai-cancel"><i class="fa fa-stop"></i> Hentikan Antrian & Tampilkan Hasil Sementara</button>
+                    </div>
+                </div>
+
+                <!-- STATE 3: HASIL AUDIT SEMUA KELAS -->
+                <div id="all-ai-result-container" style="display: none;">
+                    <div class="row" style="margin-bottom: 15px;">
+                        <div class="col-md-2 col-sm-4 col-xs-6" style="padding-right: 4px; padding-left: 8px;">
+                            <div class="info-box bg-aqua" style="border-radius: 5px; min-height: 68px;">
+                                <span class="info-box-icon" style="height: 68px; line-height: 68px; background: rgba(0,0,0,0.1); font-size: 24px;"><i class="fa fa-list-ol"></i></span>
+                                <div class="info-box-content" style="padding-left: 4px;">
+                                    <span class="info-box-text" style="font-size: 10px;">Total Diperiksa</span>
+                                    <span class="info-box-number" id="all-kpi-total" style="font-size: 19px;">0</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-2 col-sm-4 col-xs-6" style="padding-right: 4px; padding-left: 4px;">
+                            <div class="info-box bg-green" style="border-radius: 5px; min-height: 68px;">
+                                <span class="info-box-icon" style="height: 68px; line-height: 68px; background: rgba(0,0,0,0.1); font-size: 24px;"><i class="fa fa-check-circle"></i></span>
+                                <div class="info-box-content" style="padding-left: 4px;">
+                                    <span class="info-box-text" style="font-size: 10px;">Kunci Sesuai</span>
+                                    <span class="info-box-number" id="all-kpi-sesuai" style="font-size: 19px;">0</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-2 col-sm-4 col-xs-6" style="padding-right: 4px; padding-left: 4px;">
+                            <div class="info-box bg-red" style="border-radius: 5px; min-height: 68px;">
+                                <span class="info-box-icon" style="height: 68px; line-height: 68px; background: rgba(0,0,0,0.1); font-size: 24px;"><i class="fa fa-times-circle"></i></span>
+                                <div class="info-box-content" style="padding-left: 4px;">
+                                    <span class="info-box-text" style="font-size: 10px;">Kunci Salah</span>
+                                    <span class="info-box-number" id="all-kpi-salah" style="font-size: 19px;">0</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-2 col-sm-4 col-xs-6" style="padding-right: 4px; padding-left: 4px;">
+                            <div class="info-box bg-yellow" style="border-radius: 5px; min-height: 68px;">
+                                <span class="info-box-icon" style="height: 68px; line-height: 68px; background: rgba(0,0,0,0.1); font-size: 24px;"><i class="fa fa-exclamation-triangle"></i></span>
+                                <div class="info-box-content" style="padding-left: 4px;">
+                                    <span class="info-box-text" style="font-size: 10px;">Tidak Logis</span>
+                                    <span class="info-box-number" id="all-kpi-logis" style="font-size: 19px;">0</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-2 col-sm-4 col-xs-6" style="padding-right: 4px; padding-left: 4px;">
+                            <div class="info-box bg-purple" style="border-radius: 5px; min-height: 68px;">
+                                <span class="info-box-icon" style="height: 68px; line-height: 68px; background: rgba(0,0,0,0.1); font-size: 24px;"><i class="fa fa-random"></i></span>
+                                <div class="info-box-content" style="padding-left: 4px;">
+                                    <span class="info-box-text" style="font-size: 10px;">Cacat Acak</span>
+                                    <span class="info-box-number" id="all-kpi-acak" style="font-size: 19px;">0</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-2 col-sm-4 col-xs-6" style="padding-right: 8px; padding-left: 4px;">
+                            <div class="info-box bg-teal" style="border-radius: 5px; min-height: 68px;">
+                                <span class="info-box-icon" style="height: 68px; line-height: 68px; background: rgba(0,0,0,0.1); font-size: 24px;"><i class="fa fa-clone"></i></span>
+                                <div class="info-box-content" style="padding-left: 4px;">
+                                    <span class="info-box-text" style="font-size: 10px;">Soal Ganda</span>
+                                    <span class="info-box-number" id="all-kpi-duplikat" style="font-size: 19px;">0</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+                        <div class="btn-group" id="all-ai-filter-group">
+                            <button type="button" class="btn btn-default btn-sm active" data-filter="all">Semua (<span id="all-count-filter-all">0</span>)</button>
+                            <button type="button" class="btn btn-default btn-sm text-red" data-filter="KUNCI_SALAH"><i class="fa fa-times-circle"></i> Kunci Salah (<span id="all-count-filter-salah">0</span>)</button>
+                            <button type="button" class="btn btn-default btn-sm text-yellow" data-filter="TIDAK_LOGIS"><i class="fa fa-exclamation-triangle"></i> Tidak Logis (<span id="all-count-filter-logis">0</span>)</button>
+                            <button type="button" class="btn btn-default btn-sm text-purple" data-filter="CACAT_ACAK"><i class="fa fa-random"></i> Cacat Acak (<span id="all-count-filter-acak">0</span>)</button>
+                            <button type="button" class="btn btn-default btn-sm text-teal" data-filter="DUPLIKAT"><i class="fa fa-clone"></i> Soal Ganda (<span id="all-count-filter-duplikat">0</span>)</button>
+                            <button type="button" class="btn btn-default btn-sm text-green" data-filter="SESUAI"><i class="fa fa-check-circle"></i> Sesuai (<span id="all-count-filter-sesuai">0</span>)</button>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <select id="all-ai-filter-bank" class="form-control input-sm" style="width: 220px; display: inline-block;">
+                                <option value="all">Semua Bank Soal / Kelas</option>
+                            </select>
+                            <button type="button" class="btn btn-sm btn-danger btn-flat" id="btn-all-terapkan-semua-ai" style="display: none;"><i class="fa fa-check-square-o"></i> Terapkan Semua Kunci AI</button>
+                            <button type="button" class="btn btn-sm btn-default btn-flat" id="btn-all-reanalisis"><i class="fa fa-refresh"></i> Ulangi</button>
+                        </div>
+                    </div>
+
+                    <div class="table-responsive" style="max-height: 480px; overflow-y: auto; border: 1px solid #d2d6de; border-radius: 4px; background: #fff;">
+                        <table class="table table-bordered table-striped table-hover" id="table-all-hasil-ai" style="margin-bottom: 0; font-size: 13px;">
+                            <thead style="background: #f4f5f9; position: sticky; top: 0; z-index: 5;">
+                                <tr>
+                                    <th style="width: 45px; text-align: center;">No</th>
+                                    <th style="width: 140px;">Bank / Kelas</th>
+                                    <th style="width: 55px; text-align: center;">No. Soal</th>
+                                    <th>Ringkasan Teks Soal</th>
+                                    <th style="width: 80px; text-align: center;">Kunci CBT</th>
+                                    <th style="width: 80px; text-align: center;">Kunci AI</th>
+                                    <th style="width: 115px; text-align: center;">Status</th>
+                                    <th>Analisis / Alasan AI</th>
+                                    <th style="width: 130px; text-align: center;">Tindakan</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tbody-all-hasil-ai"></tbody>
                         </table>
                     </div>
                 </div>

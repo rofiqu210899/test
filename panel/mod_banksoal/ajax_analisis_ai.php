@@ -5,8 +5,8 @@ require("../../config/functions.crud.php");
 cek_session_admin();
 
 header('Content-Type: application/json; charset=utf-8');
-@set_time_limit(180);
-@ini_set('max_execution_time', 180);
+@set_time_limit(300);
+@ini_set('max_execution_time', 300);
 
 $action = $_GET['action'] ?? ($_POST['action'] ?? '');
 
@@ -111,6 +111,58 @@ if ($action == 'info') {
         'ai_delay' => floatval($ai_set['delay'] ?? 4.5),
         'ai_batch_size' => intval($ai_set['batch_size'] ?? 15),
         'has_api_key' => !empty($ai_set['api_key'])
+    ]);
+    exit;
+}
+
+// ============================================================
+// 1b. LIST SEMUA BANK SOAL YANG SIAP DIANALISIS (SEMUA KELAS)
+// ============================================================
+if ($action == 'list_mapel_ready') {
+    $login_pengawas = $_SESSION['id_pengawas'] ?? 0;
+    $user_level = $_SESSION['level'] ?? 'admin';
+
+    $mapelQuery = ($user_level == 'admin')
+        ? "SELECT m.id_mapel, m.kode, m.nama, m.level, COUNT(s.id_soal) as total_soal 
+           FROM mapel m 
+           INNER JOIN soal s ON m.id_mapel = s.id_mapel AND s.jenis = '1' 
+           GROUP BY m.id_mapel 
+           HAVING total_soal > 0 
+           ORDER BY m.level ASC, m.nama ASC"
+        : "SELECT m.id_mapel, m.kode, m.nama, m.level, COUNT(s.id_soal) as total_soal 
+           FROM mapel m 
+           INNER JOIN soal s ON m.id_mapel = s.id_mapel AND s.jenis = '1' 
+           WHERE m.idguru = '$login_pengawas'
+           GROUP BY m.id_mapel 
+           HAVING total_soal > 0 
+           ORDER BY m.level ASC, m.nama ASC";
+
+    $q = mysqli_query($koneksi, $mapelQuery);
+    $list = [];
+    $grand_total = 0;
+    while ($r = mysqli_fetch_assoc($q)) {
+        $tot = (int)$r['total_soal'];
+        $grand_total += $tot;
+        $list[] = [
+            'id_mapel' => (int)$r['id_mapel'],
+            'kode' => $r['kode'],
+            'nama' => $r['nama'],
+            'level' => $r['level'],
+            'total_soal' => $tot
+        ];
+    }
+    $ai_set = get_ai_setting($koneksi);
+    echo json_encode([
+        'status' => 'success',
+        'total_mapel' => count($list),
+        'grand_total_soal' => $grand_total,
+        'ai_active' => ($ai_set['status'] == 1 && !empty($ai_set['api_key'])),
+        'ai_provider' => $ai_set['provider'] ?? 'gemini',
+        'ai_model' => $ai_set['model'],
+        'ai_delay' => floatval($ai_set['delay'] ?? 4.5),
+        'ai_batch_size' => intval($ai_set['batch_size'] ?? 15),
+        'has_api_key' => !empty($ai_set['api_key']),
+        'list' => $list
     ]);
     exit;
 }
@@ -274,8 +326,8 @@ Catatan:
 
     $userPrompt = "Berikut data butir soal yang harus dianalisis:\n" . json_encode($soal_for_prompt, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
 
-    // Panggil Unified AI Engine (Timeout disesuaikan: 120s untuk custom/reasoning model, 90s default)
-    $timeoutSec = ($ai_set['provider'] === 'custom') ? 120 : 90;
+    // Panggil Unified AI Engine (Timeout disesuaikan: 240s untuk custom/reasoning model, 180s default)
+    $timeoutSec = ($ai_set['provider'] === 'custom') ? 240 : 180;
     $call = call_ai_service($ai_set, $sysPrompt, $userPrompt, [
         'temperature' => 0.1,
         'json_mode' => true,

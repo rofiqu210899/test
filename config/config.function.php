@@ -515,9 +515,9 @@ function call_ai_service($config, $systemPrompt, $userPrompt, $options = [])
 	$baseUrl  = trim($config['base_url'] ?? '');
 	$temp     = isset($options['temperature']) ? floatval($options['temperature']) : 0.1;
 	$jsonMode = $options['json_mode'] ?? true;
-	$defaultTimeout = ($provider === 'custom') ? 120 : 90;
+	$defaultTimeout = ($provider === 'custom') ? 240 : 180;
 	$timeout  = isset($options['timeout']) ? intval($options['timeout']) : $defaultTimeout;
-	if ($timeout <= 0) $timeout = 90;
+	if ($timeout <= 0) $timeout = 180;
 
 	if (empty($apiKey) && $provider !== 'custom') {
 		return [
