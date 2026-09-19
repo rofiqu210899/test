@@ -35,6 +35,7 @@ if ($action == 'info') {
         'level' => $mapel['level'],
         'total_soal' => $total_soal,
         'ai_active' => ($ai_set['status'] == 1 && !empty($ai_set['api_key'])),
+        'ai_provider' => $ai_set['provider'] ?? 'gemini',
         'ai_model' => $ai_set['model'],
         'ai_delay' => floatval($ai_set['delay'] ?? 4.5),
         'ai_batch_size' => intval($ai_set['batch_size'] ?? 15),
@@ -135,14 +136,13 @@ if ($action == 'analisis') {
         exit;
     }
 
-    // Bangun Prompt Instruksi Gemini
+    // Bangun Prompt Instruksi AI Multi-Provider
     $mapelName = $mapel['nama'] ?? $mapel['kode'];
     $systemPersona = !empty($ai_set['prompt'])
         ? $ai_set['prompt']
         : "Anda adalah Validator & Reviewer Soal Ujian dan Pakar Kurikulum Sekolah Profesional tingkat SMP/MTs/SMA.";
 
-    $promptInstruction = "
-{$systemPersona}
+    $sysPrompt = "{$systemPersona}
 Mata Pelajaran: {$mapelName} (Level/Kelas: {$mapel['level']}).
 
 TUGAS ANDA:
@@ -163,77 +163,51 @@ OUTPUT HARUS FORMAT JSON ARRAY MURNI (tanpa teks pembuka/penutup):
     \"status\": \"SESUAI\",
     \"alasan\": \"Kunci A tepat karena...\"
   }
-]
+]";
 
-Berikut data butir soal yang harus dianalisis:
-" . json_encode($soal_for_prompt, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+    $userPrompt = "Berikut data butir soal yang harus dianalisis:\n" . json_encode($soal_for_prompt, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
 
-    $apiKey = $ai_set['api_key'];
-    $model  = $ai_set['model'];
-
-    $url = "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?key={$apiKey}";
-    $payload = [
-        'contents' => [
-            [
-                'parts' => [
-                    ['text' => $promptInstruction]
-                ]
-            ]
-        ],
-        'generationConfig' => [
-            'temperature' => 0.1,
-            'responseMimeType' => 'application/json'
-        ]
-    ];
-
-    $ch = curl_init($url);
-    curl_setopt_array($ch, [
-        CURLOPT_POST => true,
-        CURLOPT_POSTFIELDS => json_encode($payload),
-        CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_SSL_VERIFYPEER => false,
-        CURLOPT_TIMEOUT => 45
+    // Panggil Unified AI Engine
+    $call = call_ai_service($ai_set, $sysPrompt, $userPrompt, [
+        'temperature' => 0.1,
+        'json_mode' => true,
+        'timeout' => 45
     ]);
-    $response = curl_exec($ch);
-    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $curlErr = curl_error($ch);
-    curl_close($ch);
 
-    if ($curlErr) {
-        echo json_encode(['status' => 'error', 'message' => 'Koneksi ke Gemini timeout/gagal: ' . $curlErr]);
+    if (!$call['success']) {
+        if ($call['code'] === 'RATE_LIMIT') {
+            echo json_encode([
+                'status' => 'error',
+                'code' => 'RATE_LIMIT',
+                'retry_after' => $call['retry_after'] ?? 10,
+                'message' => $call['message']
+            ]);
+        } else {
+            echo json_encode([
+                'status' => 'error',
+                'message' => $call['message']
+            ]);
+        }
         exit;
     }
 
-    $resJson = json_decode($response, true);
-
-    // Deteksi Rate Limit / Quota Exceeded (HTTP 429 atau RESOURCE_EXHAUSTED)
-    if ($httpCode === 429 || stripos($response, 'RESOURCE_EXHAUSTED') !== false || stripos($response, 'Quota exceeded') !== false || stripos($response, 'rate limit') !== false) {
-        $retryWait = 10;
-        echo json_encode([
-            'status' => 'error',
-            'code' => 'RATE_LIMIT',
-            'retry_after' => $retryWait,
-            'message' => 'Batas Rate Limit (RPM/TPM 429) tercapai. Menunggu ' . $retryWait . ' detik sebelum mencoba ulang otomatis.'
-        ]);
-        exit;
-    }
-
-    if ($httpCode !== 200 || !isset($resJson['candidates'][0]['content']['parts'][0]['text'])) {
-        $msg = $resJson['error']['message'] ?? ("HTTP {$httpCode}: respons Gemini tidak valid.");
-        echo json_encode(['status' => 'error', 'message' => 'Error dari Gemini AI: ' . $msg]);
-        exit;
-    }
-
-    $rawAiText = trim($resJson['candidates'][0]['content']['parts'][0]['text']);
-    // Bersihkan code fences bila ada
-    $rawAiText = preg_replace('/^```(?:json)?\s*|\s*```$/i', '', $rawAiText);
+    $rawAiText = $call['content'];
     $parsedAi = json_decode($rawAiText, true);
+
+    // Tangani jika respon AI terbungkus key (misal {"soal": [...]} atau {"data": [...]})
+    if (is_array($parsedAi) && !isset($parsedAi[0])) {
+        foreach ($parsedAi as $val) {
+            if (is_array($val) && isset($val[0])) {
+                $parsedAi = $val;
+                break;
+            }
+        }
+    }
 
     if (!is_array($parsedAi)) {
         echo json_encode([
             'status' => 'error',
-            'message' => 'AI tidak mengembalikan format JSON yang valid.',
+            'message' => 'AI (' . strtoupper($call['provider']) . ') tidak mengembalikan format JSON yang valid.',
             'raw' => $rawAiText
         ]);
         exit;

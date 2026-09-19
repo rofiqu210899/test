@@ -1219,14 +1219,15 @@ if ($ac == '') :
                     currentAiDelay = parseFloat(res.ai_delay) || 4.5;
                     currentAiBatchSize = parseInt(res.ai_batch_size) || 15;
 
+                    $('#ai-modal-provider').text((res.ai_provider || 'gemini').toUpperCase());
                     $('#ai-modal-model').text(res.ai_model || 'gemini-3.5-flash-lite');
                     $('#ai-total-soal-ready').text(res.total_soal);
 
-                    if (!res.has_api_key) {
+                    if (!res.has_api_key && (res.ai_provider || 'gemini') !== 'custom') {
                         $('#ai-error-container').html(
                             '<div class="callout callout-warning" style="background:#fff; border-left-color:#f39c12;">' +
-                            '<h4><i class="fa fa-warning"></i> Gemini API Key Belum Dikonfigurasi</h4>' +
-                            '<p>Anda belum memasukkan Google Gemini API Key. Silakan buka menu Pengaturan untuk memasukkan API Key terlebih dahulu.</p>' +
+                            '<h4><i class="fa fa-warning"></i> API Key Belum Dikonfigurasi</h4>' +
+                            '<p>Anda belum memasukkan API Key untuk provider ' + (res.ai_provider || 'AI').toUpperCase() + '. Silakan buka menu Pengaturan untuk memasukkan API Key terlebih dahulu.</p>' +
                             '<p><a href="?pg=setting#tab_ai" class="btn btn-sm btn-warning btn-flat"><i class="fa fa-cog"></i> Buka Pengaturan AI</a></p>' +
                             '</div>'
                         ).show();
@@ -1563,10 +1564,10 @@ if ($ac == '') :
                     <span aria-hidden="true">&times;</span>
                 </button>
                 <h4 class="modal-title" id="modalAiTitle" style="color: #fff; font-weight: 600; margin: 0;">
-                    <i class="fa fa-robot"></i> Analisis Kesesuaian Soal & Kunci Jawaban (Gemini AI)
+                    <i class="fa fa-robot"></i> Analisis Kesesuaian Soal & Kunci Jawaban (AI Assistant)
                 </h4>
                 <div style="font-size: 12px; color: #e9d5ff; margin-top: 4px;">
-                    Bank Soal: <b id="ai-modal-kode">-</b> &bull; Mata Pelajaran: <span id="ai-modal-nama">-</span> &bull; Model AI: <span id="ai-modal-model">-</span>
+                    Bank Soal: <b id="ai-modal-kode">-</b> &bull; Mata Pelajaran: <span id="ai-modal-nama">-</span> &bull; Provider: <span class="badge bg-yellow" id="ai-modal-provider">-</span> &bull; Model AI: <b id="ai-modal-model">-</b>
                 </div>
             </div>
 

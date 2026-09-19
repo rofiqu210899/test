@@ -473,10 +473,18 @@ function get_ai_setting($koneksi)
 		@mysqli_query($koneksi, "ALTER TABLE setting ADD COLUMN gemini_delay DECIMAL(4,1) DEFAULT 4.5");
 		@mysqli_query($koneksi, "ALTER TABLE setting ADD COLUMN gemini_batch_size INT DEFAULT 15");
 	}
+	$check_provider = mysqli_query($koneksi, "SHOW COLUMNS FROM setting LIKE 'ai_provider'");
+	if ($check_provider && mysqli_num_rows($check_provider) == 0) {
+		@mysqli_query($koneksi, "ALTER TABLE setting ADD COLUMN ai_provider VARCHAR(50) DEFAULT 'gemini'");
+		@mysqli_query($koneksi, "ALTER TABLE setting ADD COLUMN ai_base_url VARCHAR(255) NULL");
+	}
 
-	$q = mysqli_query($koneksi, "SELECT gemini_api_key, gemini_model, gemini_status, gemini_prompt, gemini_delay, gemini_batch_size FROM setting WHERE id_setting='1'");
+	$q = mysqli_query($koneksi, "SELECT gemini_api_key, gemini_model, gemini_status, gemini_prompt, gemini_delay, gemini_batch_size, ai_provider, ai_base_url FROM setting WHERE id_setting='1'");
 	if ($q && $row = mysqli_fetch_assoc($q)) {
+		$provider = !empty($row['ai_provider']) ? strtolower(trim($row['ai_provider'])) : 'gemini';
 		$ai_setting = [
+			'provider' => $provider,
+			'base_url' => $row['ai_base_url'] ?? '',
 			'api_key' => $row['gemini_api_key'] ?? '',
 			'model' => !empty($row['gemini_model']) ? $row['gemini_model'] : 'gemini-3.5-flash-lite',
 			'status' => isset($row['gemini_status']) ? intval($row['gemini_status']) : 1,
@@ -486,6 +494,8 @@ function get_ai_setting($koneksi)
 		];
 	} else {
 		$ai_setting = [
+			'provider' => 'gemini',
+			'base_url' => '',
 			'api_key' => '',
 			'model' => 'gemini-3.5-flash-lite',
 			'status' => 1,
@@ -495,4 +505,168 @@ function get_ai_setting($koneksi)
 		];
 	}
 	return $ai_setting;
+}
+
+function call_ai_service($config, $systemPrompt, $userPrompt, $options = [])
+{
+	$provider = strtolower(trim($config['provider'] ?? 'gemini'));
+	$apiKey   = trim($config['api_key'] ?? '');
+	$model    = trim($config['model'] ?? 'gemini-3.5-flash-lite');
+	$baseUrl  = trim($config['base_url'] ?? '');
+	$temp     = isset($options['temperature']) ? floatval($options['temperature']) : 0.1;
+	$jsonMode = $options['json_mode'] ?? true;
+	$timeout  = isset($options['timeout']) ? intval($options['timeout']) : 45;
+
+	if (empty($apiKey) && $provider !== 'custom') {
+		return [
+			'success' => false,
+			'code' => 'NO_API_KEY',
+			'message' => 'API Key belum diisi untuk provider ' . strtoupper($provider)
+		];
+	}
+
+	// -------------------------------------------------------------
+	// PROTOKOL 1: GOOGLE GEMINI REST API
+	// -------------------------------------------------------------
+	if ($provider === 'gemini') {
+		$endpoint = "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?key={$apiKey}";
+		$fullPrompt = !empty($systemPrompt) ? ($systemPrompt . "\n\n" . $userPrompt) : $userPrompt;
+
+		$payload = [
+			'contents' => [
+				[
+					'parts' => [
+						['text' => $fullPrompt]
+					]
+				]
+			],
+			'generationConfig' => [
+				'temperature' => $temp
+			]
+		];
+		if ($jsonMode) {
+			$payload['generationConfig']['responseMimeType'] = 'application/json';
+		}
+
+		$headers = ['Content-Type: application/json'];
+	} else {
+		// -------------------------------------------------------------
+		// PROTOKOL 2: OPENAI-COMPATIBLE REST API
+		// (Groq, OpenRouter, DeepSeek, OpenAI, Custom/Local)
+		// -------------------------------------------------------------
+		if ($provider === 'groq') {
+			$endpoint = 'https://api.groq.com/openai/v1/chat/completions';
+		} elseif ($provider === 'openrouter') {
+			$endpoint = 'https://openrouter.ai/api/v1/chat/completions';
+		} elseif ($provider === 'deepseek') {
+			$endpoint = 'https://api.deepseek.com/chat/completions';
+		} elseif ($provider === 'openai') {
+			$endpoint = 'https://api.openai.com/v1/chat/completions';
+		} elseif ($provider === 'custom') {
+			$cleanBase = rtrim($baseUrl, '/');
+			if (empty($cleanBase)) {
+				$cleanBase = 'http://localhost:11434/v1'; // Default local Ollama
+			}
+			if (stripos($cleanBase, '/chat/completions') !== false) {
+				$endpoint = $cleanBase;
+			} else {
+				$endpoint = $cleanBase . '/chat/completions';
+			}
+		} else {
+			$endpoint = 'https://api.openai.com/v1/chat/completions';
+		}
+
+		$messages = [];
+		if (!empty($systemPrompt)) {
+			$messages[] = ['role' => 'system', 'content' => $systemPrompt];
+		}
+		$messages[] = ['role' => 'user', 'content' => $userPrompt];
+
+		$payload = [
+			'model' => $model,
+			'messages' => $messages,
+			'temperature' => $temp
+		];
+		if ($jsonMode) {
+			$payload['response_format'] = ['type' => 'json_object'];
+		}
+
+		$headers = [
+			'Content-Type: application/json',
+			'Authorization: Bearer ' . $apiKey
+		];
+		if ($provider === 'openrouter') {
+			$headers[] = 'HTTP-Referer: https://smpblokagung.com';
+			$headers[] = 'X-Title: Candy CBT Exam Analyzer';
+		}
+	}
+
+	// Eksekusi cURL
+	$ch = curl_init($endpoint);
+	curl_setopt_array($ch, [
+		CURLOPT_POST => true,
+		CURLOPT_POSTFIELDS => json_encode($payload),
+		CURLOPT_HTTPHEADER => $headers,
+		CURLOPT_RETURNTRANSFER => true,
+		CURLOPT_SSL_VERIFYPEER => false,
+		CURLOPT_TIMEOUT => $timeout
+	]);
+	$response = curl_exec($ch);
+	$httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+	$curlErr = curl_error($ch);
+	curl_close($ch);
+
+	if ($curlErr) {
+		return [
+			'success' => false,
+			'code' => 'CURL_ERROR',
+			'message' => 'Koneksi timeout/gagal (' . strtoupper($provider) . '): ' . $curlErr
+		];
+	}
+
+	// Deteksi 429 / Rate limit
+	if ($httpCode === 429 || stripos($response, 'RESOURCE_EXHAUSTED') !== false || stripos($response, 'Quota exceeded') !== false || stripos($response, 'rate_limit') !== false) {
+		return [
+			'success' => false,
+			'code' => 'RATE_LIMIT',
+			'retry_after' => 10,
+			'message' => 'Batas kuota laju request (Rate Limit 429) tercapai pada provider ' . strtoupper($provider) . '.'
+		];
+	}
+
+	$resJson = json_decode($response, true);
+
+	// Ambil teks balasan
+	$replyText = '';
+	if ($provider === 'gemini') {
+		if ($httpCode === 200 && isset($resJson['candidates'][0]['content']['parts'][0]['text'])) {
+			$replyText = trim($resJson['candidates'][0]['content']['parts'][0]['text']);
+		}
+	} else {
+		if ($httpCode === 200 && isset($resJson['choices'][0]['message']['content'])) {
+			$replyText = trim($resJson['choices'][0]['message']['content']);
+		}
+	}
+
+	if ($replyText === '') {
+		$errMsg = $resJson['error']['message'] ?? ($resJson['message'] ?? ("HTTP {$httpCode}: respons tidak valid dari " . strtoupper($provider)));
+		return [
+			'success' => false,
+			'code' => 'API_ERROR',
+			'http_code' => $httpCode,
+			'message' => 'Error dari ' . strtoupper($provider) . ': ' . $errMsg,
+			'raw' => substr($response, 0, 500)
+		];
+	}
+
+	// Bersihkan markdown code fences jika ada
+	$cleanText = preg_replace('/^```(?:json)?\s*|\s*```$/i', '', $replyText);
+
+	return [
+		'success' => true,
+		'provider' => $provider,
+		'model' => $model,
+		'content' => $cleanText,
+		'raw_response' => $response
+	];
 }

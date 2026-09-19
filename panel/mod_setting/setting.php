@@ -21,7 +21,7 @@ $ai_set = get_ai_setting($koneksi);
                         <li class=""><a href="#tab_2" data-toggle="tab" aria-expanded="false">Hapus Data</a></li>
                         <li class=""><a href="#tab_3" data-toggle="tab" aria-expanded="false">Backup & Restore</a></li>
                         <li class=""><a href="#tab_4" data-toggle="tab" aria-expanded="false">Backup Master Soal</a></li>
-                        <li class=""><a href="#tab_ai" data-toggle="tab" aria-expanded="false"><i class="fa fa-robot text-purple"></i> Konfigurasi AI (Gemini)</a></li>
+                        <li class=""><a href="#tab_ai" data-toggle="tab" aria-expanded="false"><i class="fa fa-robot text-purple"></i> Konfigurasi AI (Multi-Provider)</a></li>
 
                     </ul>
                     <div class="tab-content">
@@ -309,7 +309,7 @@ $ai_set = get_ai_setting($koneksi);
                                 <div class="col-md-8">
                                     <div class="box box-solid" style="border: 1px solid #d2d6de; border-radius: 4px;">
                                         <div class="box-header with-border bg-purple" style="border-radius: 4px 4px 0 0;">
-                                            <h3 class="box-title"><i class="fa fa-robot"></i> Konfigurasi Google Gemini AI</h3>
+                                            <h3 class="box-title"><i class="fa fa-robot"></i> Konfigurasi AI Multi-Provider</h3>
                                         </div>
                                         <form id="formpengaturan_ai" method="post">
                                             <div class="box-body">
@@ -328,34 +328,43 @@ $ai_set = get_ai_setting($koneksi);
                                                 </div>
 
                                                 <div class="form-group">
-                                                    <label><i class="fa fa-key"></i> Google Gemini API Key <span class="text-danger">*</span></label>
+                                                    <label><i class="fa fa-server text-purple"></i> Provider AI <span class="text-danger">*</span></label>
+                                                    <select name="ai_provider" id="ai_provider" class="form-control" style="font-weight: 600; font-size: 14px;">
+                                                        <option value="gemini" <?= ($ai_set['provider'] == 'gemini') ? 'selected' : '' ?>>🌟 Google Gemini (Gemini 3.5 Flash Lite, 2.5 Flash, 1.5 Pro)</option>
+                                                        <option value="groq" <?= ($ai_set['provider'] == 'groq') ? 'selected' : '' ?>>⚡ Groq (Super Cepat - Llama 3.3 70B, Llama 3.1 8B, Mixtral)</option>
+                                                        <option value="openrouter" <?= ($ai_set['provider'] == 'openrouter') ? 'selected' : '' ?>>🌐 OpenRouter (1 API Key untuk Ratusan Model AI)</option>
+                                                        <option value="deepseek" <?= ($ai_set['provider'] == 'deepseek') ? 'selected' : '' ?>>🧠 DeepSeek AI (DeepSeek V3 / Reasoner R1)</option>
+                                                        <option value="openai" <?= ($ai_set['provider'] == 'openai') ? 'selected' : '' ?>>🤖 OpenAI (ChatGPT - gpt-4o, gpt-4o-mini)</option>
+                                                        <option value="custom" <?= ($ai_set['provider'] == 'custom') ? 'selected' : '' ?>>⚙️ Custom / Local AI (Ollama, vLLM, Reverse Proxy)</option>
+                                                    </select>
+                                                </div>
+
+                                                <div class="form-group" id="grp-base-url" style="<?= ($ai_set['provider'] == 'custom') ? '' : 'display: none;' ?>">
+                                                    <label><i class="fa fa-link text-blue"></i> Custom Base URL (OpenAI Compatible Endpoint)</label>
+                                                    <input type="text" name="ai_base_url" id="ai_base_url" value="<?= htmlspecialchars($ai_set['base_url'] ?? '', ENT_QUOTES) ?>" class="form-control" placeholder="Contoh: http://localhost:11434/v1 atau https://api.yourproxy.com/v1">
+                                                    <small class="text-muted">Untuk model lokal Ollama gunakan <code>http://localhost:11434/v1</code>. Untuk vLLM/Proxy sesuaikan dengan endpoint Anda.</small>
+                                                </div>
+
+                                                <div class="form-group">
+                                                    <label><i class="fa fa-key"></i> <span id="lbl-api-key">API Key</span> <span class="text-danger">*</span></label>
                                                     <div class="input-group">
-                                                        <input type="password" name="gemini_api_key" id="gemini_api_key" value="<?= htmlspecialchars($ai_set['api_key'], ENT_QUOTES) ?>" class="form-control" placeholder="Masukkan Gemini API Key (AIzaSy...)" required>
+                                                        <input type="password" name="gemini_api_key" id="gemini_api_key" value="<?= htmlspecialchars($ai_set['api_key'], ENT_QUOTES) ?>" class="form-control" placeholder="Masukkan API Key..." required>
                                                         <span class="input-group-btn">
                                                             <button type="button" class="btn btn-default btn-flat" id="btn-toggle-key" title="Tampilkan/Sembunyikan Key"><i class="fa fa-eye" id="icon-eye"></i></button>
                                                         </span>
                                                     </div>
-                                                    <small class="text-muted">
-                                                        Dapatkan API Key gratis di <a href="https://aistudio.google.com/app/apikey" target="_blank" class="text-primary" style="font-weight: 600;"><i class="fa fa-external-link"></i> Google AI Studio</a>.
+                                                    <small class="text-muted" id="help-api-key">
+                                                        Dapatkan API Key di portal resmi provider.
                                                     </small>
                                                 </div>
 
                                                 <div class="form-group">
-                                                    <label><i class="fa fa-microchip"></i> Model Gemini AI <span class="text-danger">*</span></label>
-                                                    <input type="text" name="gemini_model" id="gemini_model" value="<?= htmlspecialchars(!empty($ai_set['model']) ? $ai_set['model'] : 'gemini-3.5-flash-lite', ENT_QUOTES) ?>" class="form-control" placeholder="Contoh: gemini-3.5-flash-lite, gemini-2.5-flash, gemini-2.0-flash, dll" list="model_list" required>
-                                                    <datalist id="model_list">
-                                                        <option value="gemini-3.5-flash-lite">
-                                                        <option value="gemini-2.5-flash">
-                                                        <option value="gemini-2.0-flash">
-                                                        <option value="gemini-1.5-flash">
-                                                        <option value="gemini-1.5-pro">
-                                                    </datalist>
+                                                    <label><i class="fa fa-microchip"></i> Model AI <span class="text-danger">*</span></label>
+                                                    <input type="text" name="gemini_model" id="gemini_model" value="<?= htmlspecialchars(!empty($ai_set['model']) ? $ai_set['model'] : 'gemini-3.5-flash-lite', ENT_QUOTES) ?>" class="form-control" placeholder="Tulis nama model AI..." list="model_list" required>
+                                                    <datalist id="model_list"></datalist>
                                                     <small class="text-muted" style="display: block; margin-top: 5px;">
-                                                        Tulis nama model Gemini yang ingin digunakan. Rekomendasi cepat (klik untuk memilih): 
-                                                        <span style="cursor: pointer;" class="badge bg-purple btn-quick-model" data-model="gemini-3.5-flash-lite"><i class="fa fa-star text-yellow"></i> gemini-3.5-flash-lite (15 RPM / 500 RPD)</span>
-                                                        <span style="cursor: pointer;" class="badge bg-blue btn-quick-model" data-model="gemini-2.5-flash">gemini-2.5-flash</span>
-                                                        <span style="cursor: pointer;" class="badge bg-green btn-quick-model" data-model="gemini-2.0-flash">gemini-2.0-flash</span>
-                                                        <span style="cursor: pointer;" class="badge bg-yellow btn-quick-model" data-model="gemini-1.5-pro">gemini-1.5-pro</span>
+                                                        Tulis nama model atau klik rekomendasi cepat berikut:
+                                                        <div id="quick-model-badges" style="margin-top: 4px; display: flex; flex-wrap: wrap; gap: 5px;"></div>
                                                     </small>
                                                 </div>
 
@@ -363,21 +372,21 @@ $ai_set = get_ai_setting($koneksi);
                                                     <div class="col-md-6">
                                                         <div class="form-group">
                                                             <label><i class="fa fa-hourglass-half text-purple"></i> Jeda Antar Batch (Detik) <small class="text-success">[Anti-RPM Limit]</small></label>
-                                                            <input type="number" step="0.5" min="1" max="30" name="gemini_delay" id="gemini_delay" value="<?= htmlspecialchars($ai_set['delay'] ?? 4.5, ENT_QUOTES) ?>" class="form-control" required>
-                                                            <small class="text-muted">Jeda tunggu sebelum request batch berikutnya dikirim. <b>4.5 detik</b> menjamin laju aman di bawah batas 15 RPM.</small>
+                                                            <input type="number" step="0.5" min="0.5" max="30" name="gemini_delay" id="gemini_delay" value="<?= htmlspecialchars($ai_set['delay'] ?? 4.5, ENT_QUOTES) ?>" class="form-control" required>
+                                                            <small class="text-muted">Jeda tunggu sebelum request batch berikutnya. Gemini: <b>4.5s</b>, Groq/OpenAI: <b>1.0 - 2.0s</b>.</small>
                                                         </div>
                                                     </div>
                                                     <div class="col-md-6">
                                                         <div class="form-group">
-                                                            <label><i class="fa fa-cubes text-blue"></i> Soal per Batch <small class="text-success">[Anti-RPD & TPM]</small></label>
+                                                            <label><i class="fa fa-cubes text-blue"></i> Soal per Batch <small class="text-success">[Hemat Kuota]</small></label>
                                                             <input type="number" min="5" max="25" name="gemini_batch_size" id="gemini_batch_size" value="<?= htmlspecialchars($ai_set['batch_size'] ?? 15, ENT_QUOTES) ?>" class="form-control" required>
-                                                            <small class="text-muted">Jumlah butir soal per batch request. Disarankan <b>12 - 15 butir</b> (hemat kuota harian & aman dari 250K TPM).</small>
+                                                            <small class="text-muted">Jumlah soal per batch request. Disarankan <b>12 - 15 butir</b>.</small>
                                                         </div>
                                                     </div>
                                                 </div>
 
                                                 <div class="form-group">
-                                                    <label><i class="fa fa-commenting-o"></i> Instruksi Tambahan / Prompt Khusus (Opsional)</label>
+                                                    <label><i class="fa fa-commenting-o"></i> Instruksi Tambahan / Custom Prompt (Opsional)</label>
                                                     <textarea name="gemini_prompt" id="gemini_prompt" class="form-control" rows="3" placeholder="Instruksi kustom untuk validator AI (kosongkan jika ingin memakai default sistem)..."><?= htmlspecialchars($ai_set['prompt'], ENT_QUOTES) ?></textarea>
                                                 </div>
                                             </div>
@@ -393,22 +402,9 @@ $ai_set = get_ai_setting($koneksi);
                                 <div class="col-md-4">
                                     <div class="box box-solid" style="border: 1px solid #d2d6de; border-radius: 4px;">
                                         <div class="box-header with-border">
-                                            <h3 class="box-title"><i class="fa fa-info-circle text-info"></i> Petunjuk Setup</h3>
+                                            <h3 class="box-title"><i class="fa fa-info-circle text-info"></i> Info & Panduan Provider</h3>
                                         </div>
-                                        <div class="box-body" style="font-size: 13px; line-height: 1.6;">
-                                            <ol style="padding-left: 18px; margin-bottom: 12px;">
-                                                <li>Kunjungi situs <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a>.</li>
-                                                <li>Login dengan akun Google, lalu klik tombol <b>"Create API Key"</b>.</li>
-                                                <li>Salin API Key yang diawali dengan <code>AIzaSy...</code> dan tempelkan ke form di samping.</li>
-                                                <li>Pilih model (disarankan <b>gemini-2.5-flash</b>).</li>
-                                                <li>Klik <b>Test Koneksi AI</b> untuk verifikasi.</li>
-                                                <li>Klik <b>Simpan Konfigurasi AI</b>.</li>
-                                            </ol>
-                                            <div class="callout callout-info" style="margin-bottom: 0; padding: 10px 12px;">
-                                                <i class="fa fa-magic"></i> <b>Analisis Bank Soal:</b><br>
-                                                Buka menu <b>Bank Soal</b> lalu klik tombol <b><i class="fa fa-robot"></i> Analisis AI</b> untuk memeriksa kesesuaian soal dan kunci jawaban.
-                                            </div>
-                                        </div>
+                                        <div class="box-body" id="petunjuk-provider-container" style="font-size: 13px; line-height: 1.6;"></div>
                                     </div>
                                 </div>
                             </div>
@@ -582,31 +578,177 @@ $ai_set = get_ai_setting($koneksi);
         return false;
     });
 
+    // ============================================================
+    // DYNAMIC MULTI-PROVIDER AI CONTROLLER
+    // ============================================================
+    var providerMeta = {
+        gemini: {
+            name: 'Google Gemini',
+            keyLabel: 'Google Gemini API Key',
+            keyPlaceholder: 'AIzaSy...',
+            helpText: 'Dapatkan API Key gratis di <a href="https://aistudio.google.com/app/apikey" target="_blank" class="text-primary font-weight-bold"><i class="fa fa-external-link"></i> Google AI Studio</a>.',
+            defaultModel: 'gemini-3.5-flash-lite',
+            models: [
+                { id: 'gemini-3.5-flash-lite', label: '⭐ gemini-3.5-flash-lite (15 RPM / 500 RPD)', badge: 'bg-purple' },
+                { id: 'gemini-2.5-flash', label: 'gemini-2.5-flash', badge: 'bg-blue' },
+                { id: 'gemini-2.0-flash', label: 'gemini-2.0-flash', badge: 'bg-green' },
+                { id: 'gemini-1.5-pro', label: 'gemini-1.5-pro', badge: 'bg-yellow' }
+            ],
+            defaultDelay: 4.5,
+            defaultBatch: 15,
+            guide: '<ol style="padding-left:18px;"><li>Buka <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a>.</li><li>Klik <b>Create API Key</b>.</li><li>Salin API Key dan tempel di form.</li><li>Model disarankan: <b>gemini-3.5-flash-lite</b> (kuota gratis luas: 15 RPM & 500 request/hari).</li></ol>'
+        },
+        groq: {
+            name: 'Groq Cloud',
+            keyLabel: 'Groq API Key',
+            keyPlaceholder: 'gsk_...',
+            helpText: 'Dapatkan API Key gratis di <a href="https://console.groq.com/keys" target="_blank" class="text-primary font-weight-bold"><i class="fa fa-external-link"></i> Groq Console</a>.',
+            defaultModel: 'llama-3.3-70b-versatile',
+            models: [
+                { id: 'llama-3.3-70b-versatile', label: '⭐ llama-3.3-70b-versatile (Tercepat)', badge: 'bg-purple' },
+                { id: 'llama-3.1-8b-instant', label: 'llama-3.1-8b-instant', badge: 'bg-blue' },
+                { id: 'mixtral-8x7b-32768', label: 'mixtral-8x7b-32768', badge: 'bg-green' },
+                { id: 'gemma2-9b-it', label: 'gemma2-9b-it', badge: 'bg-yellow' }
+            ],
+            defaultDelay: 1.5,
+            defaultBatch: 15,
+            guide: '<ol style="padding-left:18px;"><li>Buka <a href="https://console.groq.com/keys" target="_blank">Groq Console</a>.</li><li>Klik <b>Create API Key</b>.</li><li>Salin API Key (awalan <code>gsk_...</code>).</li><li><b>Keunggulan Groq:</b> Kecepatan inferensi super cepat (>300 tps). Jeda antar batch cukup 1.5 detik.</li></ol>'
+        },
+        openrouter: {
+            name: 'OpenRouter',
+            keyLabel: 'OpenRouter API Key',
+            keyPlaceholder: 'sk-or-v1-...',
+            helpText: 'Dapatkan API Key di <a href="https://openrouter.ai/keys" target="_blank" class="text-primary font-weight-bold"><i class="fa fa-external-link"></i> OpenRouter Keys</a>.',
+            defaultModel: 'meta-llama/llama-3.3-70b-instruct',
+            models: [
+                { id: 'meta-llama/llama-3.3-70b-instruct', label: '⭐ llama-3.3-70b-instruct', badge: 'bg-purple' },
+                { id: 'deepseek/deepseek-chat', label: 'deepseek/deepseek-chat', badge: 'bg-blue' },
+                { id: 'google/gemini-2.5-flash', label: 'google/gemini-2.5-flash', badge: 'bg-green' },
+                { id: 'mistralai/mistral-large', label: 'mistralai/mistral-large', badge: 'bg-yellow' }
+            ],
+            defaultDelay: 2.0,
+            defaultBatch: 15,
+            guide: '<ol style="padding-left:18px;"><li>Daftar di <a href="https://openrouter.ai/keys" target="_blank">OpenRouter</a>.</li><li>Buat API Key baru.</li><li><b>Keunggulan:</b> 1 API Key untuk mengakses ratusan model AI (Claude, DeepSeek, Llama, Gemini, Qwen).</li></ol>'
+        },
+        deepseek: {
+            name: 'DeepSeek AI',
+            keyLabel: 'DeepSeek API Key',
+            keyPlaceholder: 'sk-...',
+            helpText: 'Dapatkan API Key di <a href="https://platform.deepseek.com/api_keys" target="_blank" class="text-primary font-weight-bold"><i class="fa fa-external-link"></i> DeepSeek Platform</a>.',
+            defaultModel: 'deepseek-chat',
+            models: [
+                { id: 'deepseek-chat', label: '⭐ deepseek-chat (V3)', badge: 'bg-purple' },
+                { id: 'deepseek-reasoner', label: 'deepseek-reasoner (R1 Reasoning)', badge: 'bg-blue' }
+            ],
+            defaultDelay: 2.0,
+            defaultBatch: 15,
+            guide: '<ol style="padding-left:18px;"><li>Buka <a href="https://platform.deepseek.com/api_keys" target="_blank">DeepSeek Platform</a>.</li><li>Buat API Key baru.</li><li><b>Keunggulan:</b> Penalaran cerdas dan harga per token sangat murah.</li></ol>'
+        },
+        openai: {
+            name: 'OpenAI (ChatGPT)',
+            keyLabel: 'OpenAI API Key',
+            keyPlaceholder: 'sk-...',
+            helpText: 'Dapatkan API Key di <a href="https://platform.openai.com/api-keys" target="_blank" class="text-primary font-weight-bold"><i class="fa fa-external-link"></i> OpenAI Platform</a>.',
+            defaultModel: 'gpt-4o-mini',
+            models: [
+                { id: 'gpt-4o-mini', label: '⭐ gpt-4o-mini (Cepat & Akurat)', badge: 'bg-purple' },
+                { id: 'gpt-4o', label: 'gpt-4o (Standar Flagship)', badge: 'bg-blue' }
+            ],
+            defaultDelay: 2.0,
+            defaultBatch: 15,
+            guide: '<ol style="padding-left:18px;"><li>Buka <a href="https://platform.openai.com/api-keys" target="_blank">OpenAI API Keys</a>.</li><li>Buat API Secret Key.</li><li>Model <b>gpt-4o-mini</b> sangat efisien dan akurat untuk validasi soal.</li></ol>'
+        },
+        custom: {
+            name: 'Custom / Local AI',
+            keyLabel: 'API Key (Opsional bila tanpa password)',
+            keyPlaceholder: 'Bearer token / sk-... (opsional)',
+            helpText: 'Untuk Ollama lokal biasanya tanpa API Key (bisa diisi apa saja).',
+            defaultModel: 'llama3:8b',
+            models: [
+                { id: 'llama3:8b', label: 'llama3:8b', badge: 'bg-purple' },
+                { id: 'qwen2.5:7b', label: 'qwen2.5:7b', badge: 'bg-blue' },
+                { id: 'mistral:latest', label: 'mistral:latest', badge: 'bg-green' }
+            ],
+            defaultDelay: 1.0,
+            defaultBatch: 10,
+            guide: '<ol style="padding-left:18px;"><li>Jalankan server lokal, contoh Ollama: <code>ollama run llama3:8b</code>.</li><li>Isi Base URL: <code>http://localhost:11434/v1</code>.</li><li>Tulis nama model yang sedang aktif di lokal Anda.</li><li>Privasi 100% lokal tanpa biaya token!</li></ol>'
+        }
+    };
+
+    function applyProviderUI(providerKey, isInitial) {
+        var meta = providerMeta[providerKey] || providerMeta['gemini'];
+
+        $('#lbl-api-key').text(meta.keyLabel);
+        $('#gemini_api_key').attr('placeholder', meta.keyPlaceholder);
+        $('#help-api-key').html(meta.helpText);
+
+        if (providerKey === 'custom') {
+            $('#grp-base-url').slideDown();
+        } else {
+            $('#grp-base-url').slideUp();
+        }
+
+        // Render Quick Model Badges & Datalist
+        var badgesHtml = '';
+        var datalistHtml = '';
+        meta.models.forEach(function(m) {
+            badgesHtml += '<span style="cursor: pointer;" class="badge ' + m.badge + ' btn-quick-model" data-model="' + m.id + '">' + m.label + '</span> ';
+            datalistHtml += '<option value="' + m.id + '">';
+        });
+        $('#quick-model-badges').html(badgesHtml);
+        $('#model_list').html(datalistHtml);
+
+        // Update Petunjuk
+        var guideCard = meta.guide +
+            '<div class="callout callout-info" style="margin-bottom: 0; padding: 10px 12px; margin-top: 10px;">' +
+            '<i class="fa fa-magic"></i> <b>Analisis Bank Soal:</b><br>' +
+            'Buka menu <b>Bank Soal</b> lalu klik tombol <b><i class="fa fa-robot"></i> Analisis AI</b> untuk memeriksa kesesuaian soal dan kunci jawaban.' +
+            '</div>';
+        $('#petunjuk-provider-container').html(guideCard);
+
+        if (!isInitial) {
+            $('#gemini_model').val(meta.defaultModel);
+            $('#gemini_delay').val(meta.defaultDelay);
+            $('#gemini_batch_size').val(meta.defaultBatch);
+        }
+    }
+
+    $('#ai_provider').change(function() {
+        applyProviderUI($(this).val(), false);
+    });
+
+    // Inisialisasi awal UI provider
+    applyProviderUI($('#ai_provider').val(), true);
+
     // Test Koneksi AI
     $('#btn-test-ai').click(function() {
         var btn = $(this);
         var origHtml = btn.html();
+        var provider = $('#ai_provider').val();
         var apiKey = $('#gemini_api_key').val().trim();
-        var model = $('#gemini_model').val();
+        var model = $('#gemini_model').val().trim();
+        var baseUrl = $('#ai_base_url').val().trim();
         var container = $('#hasil-test-ai');
 
-        if (!apiKey) {
+        if (!apiKey && provider !== 'custom') {
             iziToast.warning({
                 title: 'Perhatian',
-                message: 'Masukkan Gemini API Key terlebih dahulu.',
+                message: 'Masukkan API Key untuk provider ' + provider.toUpperCase() + ' terlebih dahulu.',
                 position: 'topRight'
             });
             $('#gemini_api_key').focus();
             return;
         }
 
-        btn.html('<i class="fa fa-spinner fa-spin"></i> Menguji...').prop('disabled', true);
+        btn.html('<i class="fa fa-spinner fa-spin"></i> Menguji ' + provider.toUpperCase() + '...').prop('disabled', true);
         container.hide().html('');
 
         $.ajax({
             type: 'POST',
             url: 'mod_setting/crud_setting.php?pg=test_gemini',
             data: {
+                ai_provider: provider,
+                ai_base_url: baseUrl,
                 gemini_api_key: apiKey,
                 gemini_model: model
             },
@@ -616,13 +758,13 @@ $ai_set = get_ai_setting($koneksi);
                 if (res.status === 'success') {
                     iziToast.success({
                         title: 'Sukses!',
-                        message: 'Koneksi ke Gemini AI berhasil terhubung!',
+                        message: res.message,
                         position: 'topRight'
                     });
                     container.html(
                         '<div class="alert alert-success" style="border-radius: 4px;">' +
                         '<h4><i class="icon fa fa-check"></i> ' + res.message + '</h4>' +
-                        '<p><b>Model:</b> ' + res.model + '</p>' +
+                        '<p><b>Provider:</b> ' + (res.provider || provider.toUpperCase()) + ' &bull; <b>Model:</b> ' + res.model + '</p>' +
                         '<p><b>Respons AI:</b> <i>"' + res.reply + '"</i></p>' +
                         '</div>'
                     ).slideDown();
@@ -634,7 +776,7 @@ $ai_set = get_ai_setting($koneksi);
                     });
                     container.html(
                         '<div class="alert alert-danger" style="border-radius: 4px;">' +
-                        '<h4><i class="icon fa fa-ban"></i> Uji Koneksi Gagal</h4>' +
+                        '<h4><i class="icon fa fa-ban"></i> Uji Koneksi Gagal (' + provider.toUpperCase() + ')</h4>' +
                         '<p>' + res.message + '</p>' +
                         '</div>'
                     ).slideDown();
