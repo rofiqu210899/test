@@ -36,8 +36,9 @@ $image = array('jpg', 'jpeg', 'png', 'gif', 'bmp', 'JPG', 'JPEG', 'PNG', 'GIF', 
     $habis = strtotime($nilai['ujian_berlangsung']) - strtotime($nilai['ujian_mulai']);
     $lamaujian = $mapel[0]['lama_ujian'] * 60;
 
-    if ($nilai['ujian_selesai'] <> null) {
+    if (!empty($nilai['ujian_selesai'])) {
         jump($homeurl);
+        exit;
     }
     $nomor = $_POST['no_soal'];
     $nosoal = $nomor;
@@ -520,7 +521,11 @@ $image = array('jpg', 'jpeg', 'png', 'gif', 'bmp', 'JPG', 'JPEG', 'PNG', 'GIF', 
     }
     ?>
     <script>
+        var isSubmittingSelesaiSoal = false;
         function selesai() {
+            if (isSubmittingSelesaiSoal) return;
+            isSubmittingSelesaiSoal = true;
+            $('input, button, select, textarea').prop('disabled', true);
             var idmapel = '<?= $id_mapel  ?>';
             var idsiswa = '<?= $id_siswa  ?>';
             $.ajax({
@@ -539,13 +544,18 @@ $image = array('jpg', 'jpeg', 'png', 'gif', 'bmp', 'JPG', 'JPEG', 'PNG', 'GIF', 
 
                     $('.loader').css('display', 'none');
                     location.href = homeurl;
+                },
+                error: function() {
+                    $('.loader').css('display', 'none');
+                    setTimeout(function() {
+                        location.href = homeurl;
+                    }, 1000);
                 }
             });
         }
         var lamaujian = +'<?= $lamaujian ?>';
         var habis = +'<?= $habis ?>';
 
-        console.log(habis)
         if (habis > lamaujian) {
             selesai();
         }
@@ -606,6 +616,17 @@ $image = array('jpg', 'jpeg', 'png', 'gif', 'bmp', 'JPG', 'JPEG', 'PNG', 'GIF', 
 <?php } ?>
 <?php
 if ($pg == 'jawab') {
+    $idu_val = (int)($_POST['idu'] ?? 0);
+    $idm_val = (int)($_POST['id_mapel'] ?? 0);
+    $ids_val = (int)($_POST['id_siswa'] ?? 0);
+
+    // Reject answers if exam is already finished
+    $cek_nilai = fetch($koneksi, 'nilai', array('id_ujian' => $idu_val, 'id_mapel' => $idm_val, 'id_siswa' => $ids_val));
+    if ($cek_nilai && !empty($cek_nilai['ujian_selesai'])) {
+        echo "EXPIRED";
+        exit;
+    }
+
     $jenis = $_POST['jenis'];
     $dataesai = array(
         'id_ujian' => $_POST['idu'],
@@ -647,6 +668,16 @@ if ($pg == 'jawab') {
     }
     echo $exec;
 } elseif ($pg == 'ragu') {
+    $idu_val = (int)($_POST['id_ujian'] ?? 0);
+    $idm_val = (int)($_POST['id_mapel'] ?? 0);
+    $ids_val = (int)($_POST['id_siswa'] ?? 0);
+
+    $cek_nilai = fetch($koneksi, 'nilai', array('id_ujian' => $idu_val, 'id_mapel' => $idm_val, 'id_siswa' => $ids_val));
+    if ($cek_nilai && !empty($cek_nilai['ujian_selesai'])) {
+        echo "EXPIRED";
+        exit;
+    }
+
     $where = array(
         'id_mapel' => $_POST['id_mapel'],
         'id_siswa' => $_POST['id_siswa'],

@@ -3,74 +3,141 @@ require("config/config.default.php");
 require("config/config.function.php");
 require("config/functions.crud.php");
 cek_session_siswa();
-$idm = $_POST['id_mapel'];
-$ids = $_POST['id_siswa'];
-$idu = $_POST['id_ujian'];
+
+$idm = (int)($_POST['id_mapel'] ?? 0);
+$ids = (int)($_POST['id_siswa'] ?? 0);
+$idu = (int)($_POST['id_ujian'] ?? 0);
+
+if (!$idm || !$ids || !$idu) {
+    echo "invalid";
+    exit;
+}
+
 $where = array(
     'id_mapel' => $idm,
     'id_siswa' => $ids,
     'id_ujian' => $idu
 );
-$benar = $salah = 0;
+
+// Idempotency check: if exam has already been submitted and scored, do not overwrite or reset!
+$cek_nilai = fetch($koneksi, 'nilai', $where);
+if ($cek_nilai && !empty($cek_nilai['ujian_selesai'])) {
+    echo "ok";
+    exit;
+}
+
+$benar = 0;
+$salah = 0;
+
+// Fetch config from ujian first, fallback to mapel
+$ujian = fetch($koneksi, 'ujian', array('id_ujian' => $idu));
 $mapel = fetch($koneksi, 'mapel', array('id_mapel' => $idm));
-$siswa = fetch($koneksi, 'siswa', array('id_siswa' => $ids));
+
 $ceksoal = select($koneksi, 'soal', array('id_mapel' => $idm, 'jenis' => 1));
 $ceksoalesai = select($koneksi, 'soal', array('id_mapel' => $idm, 'jenis' => 2));
 
+$total_pg_bank = is_array($ceksoal) ? count($ceksoal) : 0;
+$tampil_pg = 0;
+if (!empty($ujian['tampil_pg']) && $ujian['tampil_pg'] > 0) {
+    $tampil_pg = (int)$ujian['tampil_pg'];
+} elseif (!empty($mapel['tampil_pg']) && $mapel['tampil_pg'] > 0) {
+    $tampil_pg = (int)$mapel['tampil_pg'];
+} else {
+    $tampil_pg = $total_pg_bank;
+}
+if ($tampil_pg <= 0) {
+    $tampil_pg = max(1, $total_pg_bank);
+}
+
+$bobot_pg = 100;
+if (isset($ujian['bobot_pg']) && is_numeric($ujian['bobot_pg']) && $ujian['bobot_pg'] > 0) {
+    $bobot_pg = (float)$ujian['bobot_pg'];
+} elseif (isset($mapel['bobot_pg']) && is_numeric($mapel['bobot_pg']) && $mapel['bobot_pg'] > 0) {
+    $bobot_pg = (float)$mapel['bobot_pg'];
+}
+
+// 1. Process Essay Questions
 $arrayjawabesai = array();
-foreach ($ceksoalesai as $getsoalesai) {
-    $w2 = array(
-        'id_siswa' => $ids,
-        'id_mapel' => $idm,
-        'id_soal' => $getsoalesai['id_soal'],
-        'jenis' => 2
-    );
-    // $cekjwbesai = rowcount($koneksi, 'jawaban', $w2);
-    // if ($cekjwbesai <> 0) {
-    $getjwb2 = fetch($koneksi, 'jawaban_temp', $w2);
-    if ($getjwb2) {
-        $jawabxx = str_replace("'", "`", $getjwb2['esai']);
-        $jawabxx = str_replace("#", ">>", $jawabxx);
-        $jawabxx = preg_replace('/[^A-Za-z0-9\@\<\>\$\_\&\-\+\(\)\/\?\!\;\:\`\"\[\]\*\{\}\=\%\~\`\÷\× ]/', '', $jawabxx);
-        $arrayjawabesai[$getsoalesai['id_soal']] = $jawabxx;
-    } else {
-        $arrayjawabesai[$getsoalesai['id_soal']] = 'Tidak Diisi';
+if (is_array($ceksoalesai)) {
+    foreach ($ceksoalesai as $getsoalesai) {
+        $w2 = array(
+            'id_siswa' => $ids,
+            'id_mapel' => $idm,
+            'id_soal' => $getsoalesai['id_soal'],
+            'id_ujian' => $idu,
+            'jenis' => 2
+        );
+        $getjwb2 = fetch($koneksi, 'jawaban_temp', $w2);
+        if (!$getjwb2) {
+            $getjwb2 = fetch($koneksi, 'jawaban', $w2);
+        }
+        if ($getjwb2 && !empty($getjwb2['esai'])) {
+            $jawabxx = str_replace("'", "`", $getjwb2['esai']);
+            $jawabxx = str_replace("#", ">>", $jawabxx);
+            $jawabxx = preg_replace('/[^A-Za-z0-9\@\<\>\$\_\&\-\+\(\)\/\?\!\;\:\`\"\[\]\*\{\}\=\%\~\`\÷\× ]/', '', $jawabxx);
+            $arrayjawabesai[$getsoalesai['id_soal']] = $jawabxx;
+        } else {
+            $arrayjawabesai[$getsoalesai['id_soal']] = 'Tidak Diisi';
+        }
     }
 }
+
+// 2. Process Multiple Choice Questions (PG)
 $arrayjawab = array();
-foreach ($ceksoal as $getsoal) {
-    $w = array(
-        'id_siswa' => $ids,
-        'id_mapel' => $idm,
-        'id_soal' => $getsoal['id_soal'],
-        'jenis' => 1
-    );
-    $getjwb = fetch($koneksi, 'jawaban_temp', $w);
-    if ($getjwb) {
-        $arrayjawab[$getsoal['id_soal']] = $getjwb['jawaban'];
-    } else {
-        $arrayjawab[$getsoal['id_soal']] = 'X';
+if (is_array($ceksoal)) {
+    foreach ($ceksoal as $getsoal) {
+        $w = array(
+            'id_siswa' => $ids,
+            'id_mapel' => $idm,
+            'id_soal' => $getsoal['id_soal'],
+            'id_ujian' => $idu,
+            'jenis' => 1
+        );
+        $getjwb = fetch($koneksi, 'jawaban_temp', $w);
+        if (!$getjwb) {
+            $getjwb = fetch($koneksi, 'jawaban', $w);
+        }
+
+        if ($getjwb && !empty($getjwb['jawaban']) && strtoupper($getjwb['jawaban']) != 'X') {
+            $arrayjawab[$getsoal['id_soal']] = $getjwb['jawaban'];
+            if (strtoupper($getjwb['jawaban']) == strtoupper($getsoal['jawaban'])) {
+                $benar++;
+            } else {
+                $salah++;
+            }
+        } else {
+            $arrayjawab[$getsoal['id_soal']] = 'X';
+            $salah++;
+        }
     }
-    ($getjwb['jawaban'] == $getsoal['jawaban']) ? $benar++ : $salah++;
 }
-$bagi = $mapel['tampil_pg'] / 100;
-$bobot = $mapel['bobot_pg'] / 100;
-$skor = ($benar / $bagi) * $bobot;
+
+// Calculate score safely without division by zero
+$skor = round(($benar / $tampil_pg) * $bobot_pg, 2);
+$jml_salah = max(0, $tampil_pg - $benar);
+
 $data = array(
     'ujian_selesai' => $datetime,
     'jml_benar' => $benar,
-    'jml_salah' => $mapel['tampil_pg'] - $benar,
-    'skor' => round($skor, 2),
-    'total' => round($skor, 2),
+    'jml_salah' => $jml_salah,
+    'skor' => $skor,
+    'total' => $skor,
     'online' => 0,
     'jawaban' => serialize($arrayjawab),
     'jawaban_esai' => serialize($arrayjawabesai)
 );
+
 $simpan = update($koneksi, 'nilai', $data, $where);
 if ($simpan) {
-//     delete($koneksi, 'jawaban', $where);
-        mysqli_query($koneksi, "INSERT INTO jawaban (id_jawaban,id_siswa,id_mapel,id_soal,id_ujian,jawaban,jawabx,jenis,esai,nilai_esai,ragu) select id_jawaban,jawaban_temp.id_siswa,jawaban_temp.id_mapel,jawaban_temp.id_soal,jawaban_temp.id_ujian,jawaban_temp.jawaban,jawaban_temp.jawabx,jawaban_temp.jenis,jawaban_temp.esai,jawaban_temp.nilai_esai,jawaban_temp.ragu from jawaban_temp, nilai where jawaban_temp.id_ujian=nilai.id_ujian and jawaban_temp.id_mapel=nilai.id_mapel and jawaban_temp.id_siswa=nilai.id_siswa and nilai.ujian_selesai<>''");
+    // Migrate temporary answers to permanent jawaban table safely
+    mysqli_query($koneksi, "INSERT IGNORE INTO jawaban (id_jawaban,id_siswa,id_mapel,id_soal,id_ujian,jawaban,jawabx,jenis,esai,nilai_esai,ragu) 
+        SELECT id_jawaban, id_siswa, id_mapel, id_soal, id_ujian, jawaban, jawabx, jenis, esai, nilai_esai, ragu 
+        FROM jawaban_temp 
+        WHERE id_ujian='$idu' AND id_mapel='$idm' AND id_siswa='$ids'");
 
-        mysqli_query($koneksi, "DELETE jawaban_temp FROM jawaban_temp, nilai where jawaban_temp.id_ujian=nilai.id_ujian and jawaban_temp.id_mapel=nilai.id_mapel and jawaban_temp.id_siswa=nilai.id_siswa and nilai.ujian_selesai<>''");
+    // Clean up temporary answers for this student & exam
+    mysqli_query($koneksi, "DELETE FROM jawaban_temp WHERE id_ujian='$idu' AND id_mapel='$idm' AND id_siswa='$ids'");
 }
+
 mysqli_query($koneksi, "INSERT INTO log (id_siswa,type,text,date) VALUES ('$ids','login','Selesai Ujian','$tanggal $waktu')");
+echo "ok";

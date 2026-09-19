@@ -787,6 +787,11 @@ $tglsekarang = time();
                     $qcek = mysqli_query($koneksi, "select * from nilai where id_ujian='$ac' and id_siswa='$id'");
                     $cek = mysqli_num_rows($qcek);
                     if ($cek <> 0) :
+                        $rcek = mysqli_fetch_array($qcek);
+                        if (!empty($rcek['ujian_selesai'])) {
+                            jump($homeurl);
+                            exit;
+                        }
                         $query = mysqli_fetch_array(mysqli_query($koneksi, "SELECT * FROM ujian WHERE id_ujian='$ac'"));
                         $idmapel = $query['id_mapel'];
                         $no_soal = 0;
@@ -809,6 +814,9 @@ $tglsekarang = time();
                         $nilai = fetch($koneksi, 'nilai', $where2);
                         $habis = strtotime($nilai['ujian_berlangsung']) - strtotime($nilai['ujian_mulai']);
                         $detik = ($mapel['lama_ujian'] * 60) - $habis;
+                        if ($detik < 0) {
+                            $detik = 0;
+                        }
                         $dtk = $detik % 60;
                         $mnt = floor(($detik % 3600) / 60);
                         $jam = floor(($detik % 86400) / 3600);
@@ -985,14 +993,17 @@ $tglsekarang = time();
             $(document).keydown(function(e) {
                 if (e.keyCode == 27) return false;
             });
+                var isSubmittingSelesai = false;
                 function selesai() {
+                    if (isSubmittingSelesai) return;
+                    isSubmittingSelesai = true;
+                    $('input, button, select, textarea').prop('disabled', true);
                     var idmapel = '<?= $id_mapel  ?>';
                     var idsiswa = '<?= $id_siswa  ?>';
                     $.ajax({
                         type: 'POST',
                         url: homeurl + '/selesai.php',
                         data: {
-                            
                             id_mapel: idmapel,
                             id_siswa: idsiswa,
                             id_ujian: <?= $ac ?>
@@ -1001,11 +1012,14 @@ $tglsekarang = time();
                             $('.loader').css('display', 'block');
                         },
                         success: function(response) {
-                           
                             $('.loader').css('display', 'none');
-                            location.href=homeurl;
-                           
-                           
+                            location.href = homeurl;
+                        },
+                        error: function() {
+                            $('.loader').css('display', 'none');
+                            setTimeout(function() {
+                                location.href = homeurl;
+                            }, 1000);
                         }
                     });
                 }    
@@ -1273,13 +1287,26 @@ $tglsekarang = time();
                 //     $('#result').html(result);
                 // });
 
-                var jam = $('#htmljam').html();
-                var menit = $('#htmlmnt').html();
-                var detik = $('#htmldtk').html();
+                var jam = parseInt($('#htmljam').text()) || 0;
+                var menit = parseInt($('#htmlmnt').text()) || 0;
+                var detik = parseInt($('#htmldtk').text()) || 0;
+                var hitungTimer = null;
+                var isCountdownEnded = false;
 
                 function hitung() {
-                    setTimeout(hitung, 1000);
-                    $('#countdown').html(jam + ':' + menit + ':' + detik);
+                    if (isCountdownEnded) return;
+
+                    var pad = function(n) { return (n < 10 ? '0' : '') + n; };
+                    $('#countdown').html(pad(jam) + ':' + pad(menit) + ':' + pad(detik));
+
+                    if (jam <= 0 && menit <= 0 && detik <= 0) {
+                        isCountdownEnded = true;
+                        if (hitungTimer) clearTimeout(hitungTimer);
+                        $('#countdown').html('00:00:00');
+                        waktuhabis();
+                        return;
+                    }
+
                     detik--;
                     if (detik < 0) {
                         detik = 59;
@@ -1291,26 +1318,39 @@ $tglsekarang = time();
                                 jam = 0;
                                 menit = 0;
                                 detik = 0;
-                                selesai();
+                                isCountdownEnded = true;
+                                if (hitungTimer) clearTimeout(hitungTimer);
+                                $('#countdown').html('00:00:00');
+                                waktuhabis();
+                                return;
                             }
                         }
                     }
+                    hitungTimer = setTimeout(hitung, 1000);
                 }
                 hitung();
 
             });
 
             function waktuhabis() {
+                $('input, button, select, textarea').prop('disabled', true);
                 swal({
-                    title: 'Oooo Oooww!',
-                    text: 'Waktu Ujian Telah Habis',
-                    timer: 1000,
+                    title: 'Waktu Ujian Telah Habis!',
+                    text: 'Jawaban Anda telah disimpan otomatis. Mengalihkan...',
+                    type: 'info',
+                    timer: 2000,
+                    showConfirmButton: false,
+                    allowOutsideClick: false,
+                    allowEscapeKey: false,
                     onOpen: () => {
-                        swal.showLoading()
+                        swal.showLoading();
                     }
-                }).then((result) => {
+                }).then(() => {
                     selesai();
                 });
+                setTimeout(function() {
+                    selesai();
+                }, 2500);
             }
 
             function loadsoal(idmapel, idsiswa, nosoal) {
