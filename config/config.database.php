@@ -1,10 +1,12 @@
 <?php
 // Deteksi apakah sedang berjalan di komputer lokal (Localhost / Laragon)
-$host_server = $_SERVER['HTTP_HOST'] ?? 'localhost';
+$host_server = $_SERVER['HTTP_HOST'] ?? '';
+$is_cli = (php_sapi_name() === 'cli');
 $is_local = (
     strpos($host_server, 'localhost') !== false ||
     strpos($host_server, '127.0.0.1') !== false ||
-    substr($host_server, -5) === '.test'
+    substr($host_server, -5) === '.test' ||
+    ($is_cli && strtoupper(substr(PHP_OS, 0, 3)) === 'WIN')
 );
 
 if ($is_local) {
