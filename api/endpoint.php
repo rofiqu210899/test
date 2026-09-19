@@ -529,6 +529,11 @@ switch ($action) {
         mysqli_query($koneksi, 'DELETE FROM soal WHERE id_mapel = ' . $id_mapel);
         api_json(['status' => 'success', 'message' => "Soal utk id_mapel $id_mapel telah dihapus."]);
 
+    case 'get_setting':
+        $q = mysqli_query($koneksi, "SELECT id_setting, ai_provider, ai_base_url, gemini_model, gemini_status, gemini_delay, gemini_batch_size FROM setting WHERE id_setting='1'");
+        $row = mysqli_fetch_assoc($q);
+        api_json(['status' => 'success', 'data' => $row]);
+
     default:
         api_json([
             'status' => 'success',
