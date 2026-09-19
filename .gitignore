@@ -1,4 +1,5 @@
 *.png
+!dist/img/*.png
 admin/backup_soal/
 panel/mod_setting/backup_soal/
 config/config.candy.php

@@ -53,7 +53,8 @@ require("config/config.candy.php");
 				<div class="inline-flex relative mb-4 group">
 					<div class="absolute -inset-1.5 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-2xl blur-sm opacity-60 group-hover:opacity-100 transition duration-300"></div>
 					<div class="relative w-18 h-18 sm:w-20 sm:h-20 bg-white/95 rounded-2xl p-2.5 shadow-md flex items-center justify-center ring-2 ring-white/80">
-						<img src="<?= htmlspecialchars($setting['logo']) ?>" alt="Logo Sekolah" class="max-h-full max-w-full object-contain filter drop-shadow-sm">
+						<?php $logo_src = !empty($setting['logo']) ? "$homeurl/{$setting['logo']}" : "$homeurl/dist/img/tutwuri.jpg"; ?>
+						<img src="<?= $logo_src ?>" onerror="this.onerror=null; this.src='<?= $homeurl ?>/dist/img/tutwuri.jpg';" alt="Logo Sekolah" class="max-h-full max-w-full object-contain filter drop-shadow-sm">
 					</div>
 				</div>
 
