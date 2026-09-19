@@ -341,14 +341,21 @@ $ai_set = get_ai_setting($koneksi);
                                                 </div>
 
                                                 <div class="form-group">
-                                                    <label><i class="fa fa-microchip"></i> Model Gemini AI</label>
-                                                    <select name="gemini_model" id="gemini_model" class="form-control" required>
-                                                        <option value="gemini-2.5-flash" <?= ($ai_set['model'] == 'gemini-2.5-flash') ? 'selected' : '' ?>>gemini-2.5-flash (Direkomendasikan - Paling Cepat, Akurat & Terbaru)</option>
-                                                        <option value="gemini-2.0-flash" <?= ($ai_set['model'] == 'gemini-2.0-flash') ? 'selected' : '' ?>>gemini-2.0-flash (Sangat Cepat & Stabil)</option>
-                                                        <option value="gemini-1.5-flash" <?= ($ai_set['model'] == 'gemini-1.5-flash') ? 'selected' : '' ?>>gemini-1.5-flash (Ringan & Hemat Kuota)</option>
-                                                        <option value="gemini-1.5-pro" <?= ($ai_set['model'] == 'gemini-1.5-pro') ? 'selected' : '' ?>>gemini-1.5-pro (Penalaran Mendalam / Kompleks)</option>
-                                                    </select>
-                                                    <small class="text-muted">Model <b>flash</b> memberikan respons tercepat dan kuota gratis harian tinggi.</small>
+                                                    <label><i class="fa fa-microchip"></i> Model Gemini AI <span class="text-danger">*</span></label>
+                                                    <input type="text" name="gemini_model" id="gemini_model" value="<?= htmlspecialchars(!empty($ai_set['model']) ? $ai_set['model'] : 'gemini-2.5-flash', ENT_QUOTES) ?>" class="form-control" placeholder="Contoh: gemini-2.5-flash, gemini-2.0-flash, gemini-1.5-pro, dll" list="model_list" required>
+                                                    <datalist id="model_list">
+                                                        <option value="gemini-2.5-flash">
+                                                        <option value="gemini-2.0-flash">
+                                                        <option value="gemini-1.5-flash">
+                                                        <option value="gemini-1.5-pro">
+                                                    </datalist>
+                                                    <small class="text-muted" style="display: block; margin-top: 5px;">
+                                                        Tulis nama model Gemini yang ingin digunakan. Rekomendasi cepat (klik untuk mengisi): 
+                                                        <span style="cursor: pointer;" class="badge bg-purple btn-quick-model" data-model="gemini-2.5-flash">gemini-2.5-flash</span>
+                                                        <span style="cursor: pointer;" class="badge bg-blue btn-quick-model" data-model="gemini-2.0-flash">gemini-2.0-flash</span>
+                                                        <span style="cursor: pointer;" class="badge bg-green btn-quick-model" data-model="gemini-1.5-flash">gemini-1.5-flash</span>
+                                                        <span style="cursor: pointer;" class="badge bg-yellow btn-quick-model" data-model="gemini-1.5-pro">gemini-1.5-pro</span>
+                                                    </small>
                                                 </div>
 
                                                 <div class="form-group">
@@ -630,5 +637,10 @@ $ai_set = get_ai_setting($koneksi);
                 ).slideDown();
             }
         });
+    });
+
+    $(document).on('click', '.btn-quick-model', function() {
+        var m = $(this).data('model');
+        $('#gemini_model').val(m).focus();
     });
 </script>
