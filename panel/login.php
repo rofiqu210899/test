@@ -62,9 +62,9 @@ $namasekolah = $setting['sekolah'];
 					</div>
 
 					<div class="flex items-center gap-3.5 pt-1">
-						<div class="w-14 h-14 bg-white/95 rounded-2xl p-2 shadow-lg ring-2 ring-white/10 flex items-center justify-center shrink-0">
+						<div class="w-14 h-14 bg-white/95 rounded-2xl p-2 shadow-lg ring-2 ring-white/10 flex items-center justify-center shrink-0 overflow-hidden">
 							<?php $logo_src = !empty($setting['logo']) ? "$homeurl/{$setting['logo']}" : "$homeurl/dist/img/tutwuri.jpg"; ?>
-							<img src="<?= $logo_src ?>" onerror="this.onerror=null; this.src='<?= $homeurl ?>/dist/img/tutwuri.jpg';" alt="Logo CBT" class="max-h-full max-w-full object-contain">
+							<img src="<?= $logo_src ?>" onerror="this.onerror=null; this.src='<?= $homeurl ?>/dist/img/tutwuri.jpg';" alt="Logo CBT" style="max-width: 44px; max-height: 44px; width: 100%; height: 100%; object-fit: contain;">
 						</div>
 						<div>
 							<h1 class="text-lg font-bold text-white tracking-tight leading-tight">

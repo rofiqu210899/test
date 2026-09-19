@@ -58,8 +58,8 @@ $logo_src = !empty($setting['logo']) ? "$homeurl/{$setting['logo']}" : "$homeurl
 
 				<!-- Top Brand & School Identity -->
 				<div class="relative z-10 flex items-center gap-3.5">
-					<div class="w-13 h-13 sm:w-14 sm:h-14 rounded-2xl bg-white/95 p-2 shadow-lg ring-2 ring-white/20 flex items-center justify-center shrink-0">
-						<img src="<?= $logo_src ?>" onerror="this.onerror=null; this.src='<?= $homeurl ?>/dist/img/tutwuri.jpg';" alt="Logo Sekolah" class="max-h-full max-w-full object-contain filter drop-shadow-sm">
+					<div class="w-14 h-14 rounded-2xl bg-white/95 p-2 shadow-lg ring-2 ring-white/20 flex items-center justify-center shrink-0 overflow-hidden">
+						<img src="<?= $logo_src ?>" onerror="this.onerror=null; this.src='<?= $homeurl ?>/dist/img/tutwuri.jpg';" alt="Logo Sekolah" style="max-width: 44px; max-height: 44px; width: 100%; height: 100%; object-fit: contain;">
 					</div>
 					<div>
 						<h1 class="text-base sm:text-lg font-bold text-white tracking-tight leading-snug line-clamp-1">
@@ -94,8 +94,8 @@ $logo_src = !empty($setting['logo']) ? "$homeurl/{$setting['logo']}" : "$homeurl
 				<!-- Form Header -->
 				<div class="mb-6">
 					<div class="lg:hidden mb-3.5 flex items-center gap-2.5">
-						<div class="w-10 h-10 rounded-xl bg-white p-1.5 shadow-sm ring-1 ring-slate-200 flex items-center justify-center shrink-0">
-							<img src="<?= $logo_src ?>" onerror="this.onerror=null; this.src='<?= $homeurl ?>/dist/img/tutwuri.jpg';" alt="Logo" class="max-h-full max-w-full object-contain">
+						<div class="w-10 h-10 rounded-xl bg-white p-1.5 shadow-sm ring-1 ring-slate-200 flex items-center justify-center shrink-0 overflow-hidden">
+							<img src="<?= $logo_src ?>" onerror="this.onerror=null; this.src='<?= $homeurl ?>/dist/img/tutwuri.jpg';" alt="Logo" style="max-width: 32px; max-height: 32px; width: 100%; height: 100%; object-fit: contain;">
 						</div>
 						<span class="text-xs font-bold text-slate-800 line-clamp-1"><?= htmlspecialchars($setting['sekolah']) ?></span>
 					</div>
