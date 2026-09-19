@@ -1273,7 +1273,8 @@ if ($ac == '') :
     var currentAiDelay = 4.5;
     var currentAiBatchSize = 15;
 
-    $('#btn-mulai-analisis, #btn-reanalisis').click(function() {
+    $(document).on('click', '#btn-mulai-analisis, #btn-reanalisis', function() {
+        console.log('Mulai Analisis AI diklik. Mapel ID:', currentAiMapelId, 'Total Soal:', currentAiTotal);
         $('#ai-pre-analysis').hide();
         $('#ai-result-container').hide();
         $('#ai-error-container').hide().html('');
@@ -1281,8 +1282,8 @@ if ($ac == '') :
 
         aiResults = [];
         $('#ai-progress-bar').css('width', '0%').text('0%');
-        $('#ai-progress-status').text('Menganalisis Butir Soal dengan Gemini AI...');
-        $('#ai-progress-detail').text('Menghubungkan ke API Gemini...');
+        $('#ai-progress-status').text('Menganalisis Butir Soal dengan AI...');
+        $('#ai-progress-detail').text('Menghubungkan ke API AI...');
 
         runAiBatch(0, currentAiBatchSize, 0);
     });
@@ -1500,7 +1501,7 @@ if ($ac == '') :
     });
 
     // Terapkan Semua Kunci AI yang Salah
-    $('#btn-terapkan-semua-ai').click(function() {
+    $(document).on('click', '#btn-terapkan-semua-ai', function() {
         var wrongButtons = $('.btn-apply-key:visible');
         if (wrongButtons.length === 0) {
             wrongButtons = $('.btn-apply-key');
@@ -1679,7 +1680,6 @@ if ($ac == '') :
         </div>
     </div>
 </div>
-<script>
 <script>
     tinymce.init({
         selector: '.editor1',
