@@ -36,6 +36,8 @@ if ($action == 'info') {
         'total_soal' => $total_soal,
         'ai_active' => ($ai_set['status'] == 1 && !empty($ai_set['api_key'])),
         'ai_model' => $ai_set['model'],
+        'ai_delay' => floatval($ai_set['delay'] ?? 4.5),
+        'ai_batch_size' => intval($ai_set['batch_size'] ?? 15),
         'has_api_key' => !empty($ai_set['api_key'])
     ]);
     exit;
@@ -47,8 +49,6 @@ if ($action == 'info') {
 if ($action == 'analisis') {
     $id_mapel = intval($_POST['id_mapel'] ?? 0);
     $offset   = intval($_POST['offset'] ?? 0);
-    $limit    = intval($_POST['limit'] ?? 10); // Batch per 10 soal agar respons cepat & tidak time out
-    if ($limit <= 0 || $limit > 25) $limit = 10;
 
     if ($id_mapel <= 0) {
         echo json_encode(['status' => 'error', 'message' => 'ID Mapel tidak valid.']);
@@ -56,6 +56,10 @@ if ($action == 'analisis') {
     }
 
     $ai_set = get_ai_setting($koneksi);
+    $defaultLimit = intval($ai_set['batch_size'] ?? 15);
+    $limit    = isset($_POST['limit']) ? intval($_POST['limit']) : $defaultLimit;
+    if ($limit <= 0 || $limit > 25) $limit = ($defaultLimit > 0) ? $defaultLimit : 15;
+
     if (empty($ai_set['api_key'])) {
         echo json_encode([
             'status' => 'error',
@@ -83,8 +87,11 @@ if ($action == 'analisis') {
     $soal_for_prompt = [];
 
     while ($r = mysqli_fetch_assoc($q_soal)) {
-        // Bersihkan HTML tag berlebih untuk prompt efisien
+        // Bersihkan HTML tag berlebih untuk efisiensi token prompt (Anti-TPM Peak)
         $clean_soal = trim(strip_tags(str_replace(['<br>', '<br/>', '<br />', '</p>'], "\n", $r['soal'])));
+        if (mb_strlen($clean_soal) > 1000) {
+            $clean_soal = mb_substr($clean_soal, 0, 1000) . '... [dipersingkat]';
+        }
         $cleanA = trim(strip_tags($r['pilA']));
         $cleanB = trim(strip_tags($r['pilB']));
         $cleanC = trim(strip_tags($r['pilC']));
@@ -199,6 +206,19 @@ Berikut data butir soal yang harus dianalisis:
     }
 
     $resJson = json_decode($response, true);
+
+    // Deteksi Rate Limit / Quota Exceeded (HTTP 429 atau RESOURCE_EXHAUSTED)
+    if ($httpCode === 429 || stripos($response, 'RESOURCE_EXHAUSTED') !== false || stripos($response, 'Quota exceeded') !== false || stripos($response, 'rate limit') !== false) {
+        $retryWait = 10;
+        echo json_encode([
+            'status' => 'error',
+            'code' => 'RATE_LIMIT',
+            'retry_after' => $retryWait,
+            'message' => 'Batas Rate Limit (RPM/TPM 429) tercapai. Menunggu ' . $retryWait . ' detik sebelum mencoba ulang otomatis.'
+        ]);
+        exit;
+    }
+
     if ($httpCode !== 200 || !isset($resJson['candidates'][0]['content']['parts'][0]['text'])) {
         $msg = $resJson['error']['message'] ?? ("HTTP {$httpCode}: respons Gemini tidak valid.");
         echo json_encode(['status' => 'error', 'message' => 'Error dari Gemini AI: ' . $msg]);

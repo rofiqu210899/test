@@ -342,20 +342,38 @@ $ai_set = get_ai_setting($koneksi);
 
                                                 <div class="form-group">
                                                     <label><i class="fa fa-microchip"></i> Model Gemini AI <span class="text-danger">*</span></label>
-                                                    <input type="text" name="gemini_model" id="gemini_model" value="<?= htmlspecialchars(!empty($ai_set['model']) ? $ai_set['model'] : 'gemini-2.5-flash', ENT_QUOTES) ?>" class="form-control" placeholder="Contoh: gemini-2.5-flash, gemini-2.0-flash, gemini-1.5-pro, dll" list="model_list" required>
+                                                    <input type="text" name="gemini_model" id="gemini_model" value="<?= htmlspecialchars(!empty($ai_set['model']) ? $ai_set['model'] : 'gemini-3.5-flash-lite', ENT_QUOTES) ?>" class="form-control" placeholder="Contoh: gemini-3.5-flash-lite, gemini-2.5-flash, gemini-2.0-flash, dll" list="model_list" required>
                                                     <datalist id="model_list">
+                                                        <option value="gemini-3.5-flash-lite">
                                                         <option value="gemini-2.5-flash">
                                                         <option value="gemini-2.0-flash">
                                                         <option value="gemini-1.5-flash">
                                                         <option value="gemini-1.5-pro">
                                                     </datalist>
                                                     <small class="text-muted" style="display: block; margin-top: 5px;">
-                                                        Tulis nama model Gemini yang ingin digunakan. Rekomendasi cepat (klik untuk mengisi): 
-                                                        <span style="cursor: pointer;" class="badge bg-purple btn-quick-model" data-model="gemini-2.5-flash">gemini-2.5-flash</span>
-                                                        <span style="cursor: pointer;" class="badge bg-blue btn-quick-model" data-model="gemini-2.0-flash">gemini-2.0-flash</span>
-                                                        <span style="cursor: pointer;" class="badge bg-green btn-quick-model" data-model="gemini-1.5-flash">gemini-1.5-flash</span>
+                                                        Tulis nama model Gemini yang ingin digunakan. Rekomendasi cepat (klik untuk memilih): 
+                                                        <span style="cursor: pointer;" class="badge bg-purple btn-quick-model" data-model="gemini-3.5-flash-lite"><i class="fa fa-star text-yellow"></i> gemini-3.5-flash-lite (15 RPM / 500 RPD)</span>
+                                                        <span style="cursor: pointer;" class="badge bg-blue btn-quick-model" data-model="gemini-2.5-flash">gemini-2.5-flash</span>
+                                                        <span style="cursor: pointer;" class="badge bg-green btn-quick-model" data-model="gemini-2.0-flash">gemini-2.0-flash</span>
                                                         <span style="cursor: pointer;" class="badge bg-yellow btn-quick-model" data-model="gemini-1.5-pro">gemini-1.5-pro</span>
                                                     </small>
+                                                </div>
+
+                                                <div class="row">
+                                                    <div class="col-md-6">
+                                                        <div class="form-group">
+                                                            <label><i class="fa fa-hourglass-half text-purple"></i> Jeda Antar Batch (Detik) <small class="text-success">[Anti-RPM Limit]</small></label>
+                                                            <input type="number" step="0.5" min="1" max="30" name="gemini_delay" id="gemini_delay" value="<?= htmlspecialchars($ai_set['delay'] ?? 4.5, ENT_QUOTES) ?>" class="form-control" required>
+                                                            <small class="text-muted">Jeda tunggu sebelum request batch berikutnya dikirim. <b>4.5 detik</b> menjamin laju aman di bawah batas 15 RPM.</small>
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <div class="form-group">
+                                                            <label><i class="fa fa-cubes text-blue"></i> Soal per Batch <small class="text-success">[Anti-RPD & TPM]</small></label>
+                                                            <input type="number" min="5" max="25" name="gemini_batch_size" id="gemini_batch_size" value="<?= htmlspecialchars($ai_set['batch_size'] ?? 15, ENT_QUOTES) ?>" class="form-control" required>
+                                                            <small class="text-muted">Jumlah butir soal per batch request. Disarankan <b>12 - 15 butir</b> (hemat kuota harian & aman dari 250K TPM).</small>
+                                                        </div>
+                                                    </div>
                                                 </div>
 
                                                 <div class="form-group">

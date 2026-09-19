@@ -168,10 +168,12 @@ if ($pg == 'setting_ai') {
     header('Content-Type: application/json; charset=utf-8');
     get_ai_setting($koneksi);
     $data = [
-        'gemini_api_key' => trim($_POST['gemini_api_key'] ?? ''),
-        'gemini_model'   => trim($_POST['gemini_model'] ?? 'gemini-2.5-flash'),
-        'gemini_status'  => isset($_POST['gemini_status']) ? intval($_POST['gemini_status']) : 1,
-        'gemini_prompt'  => trim($_POST['gemini_prompt'] ?? '')
+        'gemini_api_key'    => trim($_POST['gemini_api_key'] ?? ''),
+        'gemini_model'      => trim($_POST['gemini_model'] ?? 'gemini-3.5-flash-lite'),
+        'gemini_status'     => isset($_POST['gemini_status']) ? intval($_POST['gemini_status']) : 1,
+        'gemini_prompt'     => trim($_POST['gemini_prompt'] ?? ''),
+        'gemini_delay'      => isset($_POST['gemini_delay']) ? max(1.0, floatval($_POST['gemini_delay'])) : 4.5,
+        'gemini_batch_size' => isset($_POST['gemini_batch_size']) ? max(5, min(25, intval($_POST['gemini_batch_size']))) : 15
     ];
     $exec = update($koneksi, 'setting', $data, ['id_setting' => 1]);
     if ($exec) {

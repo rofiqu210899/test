@@ -1216,7 +1216,10 @@ if ($ac == '') :
             success: function(res) {
                 if (res.status === 'success') {
                     currentAiTotal = res.total_soal;
-                    $('#ai-modal-model').text(res.ai_model || 'gemini-2.5-flash');
+                    currentAiDelay = parseFloat(res.ai_delay) || 4.5;
+                    currentAiBatchSize = parseInt(res.ai_batch_size) || 15;
+
+                    $('#ai-modal-model').text(res.ai_model || 'gemini-3.5-flash-lite');
                     $('#ai-total-soal-ready').text(res.total_soal);
 
                     if (!res.has_api_key) {
@@ -1266,6 +1269,9 @@ if ($ac == '') :
         });
     });
 
+    var currentAiDelay = 4.5;
+    var currentAiBatchSize = 15;
+
     $('#btn-mulai-analisis, #btn-reanalisis').click(function() {
         $('#ai-pre-analysis').hide();
         $('#ai-result-container').hide();
@@ -1277,13 +1283,14 @@ if ($ac == '') :
         $('#ai-progress-status').text('Menganalisis Butir Soal dengan Gemini AI...');
         $('#ai-progress-detail').text('Menghubungkan ke API Gemini...');
 
-        runAiBatch(0, 10);
+        runAiBatch(0, currentAiBatchSize, 0);
     });
 
-    function runAiBatch(offset, limit) {
-        var batchNo = Math.floor(offset / limit) + 1;
+    function runAiBatch(offset, limit, retryCount) {
+        limit = limit || currentAiBatchSize || 15;
+        retryCount = retryCount || 0;
         var endRange = Math.min(offset + limit, currentAiTotal);
-        $('#ai-progress-detail').text('Menganalisis butir soal ' + (offset + 1) + ' s/d ' + endRange + ' dari ' + currentAiTotal + ' soal...');
+        $('#ai-progress-detail').html('Menganalisis butir soal <b>' + (offset + 1) + ' s/d ' + endRange + '</b> dari ' + currentAiTotal + ' soal...');
 
         $.ajax({
             type: 'POST',
@@ -1304,7 +1311,18 @@ if ($ac == '') :
                     $('#ai-progress-bar').css('width', progress + '%').text(progress + '%');
 
                     if (!res.is_finished && res.processed_total < currentAiTotal) {
-                        runAiBatch(res.processed_total, limit);
+                        // Terapkan cooldown anti-RPM limit
+                        var waitSec = currentAiDelay;
+                        $('#ai-progress-detail').html('<i class="fa fa-clock-o text-purple"></i> Jeda aman anti-RPM: <b>' + waitSec.toFixed(1) + 's</b> sebelum batch berikutnya...');
+                        var timer = setInterval(function() {
+                            waitSec = Math.max(0, waitSec - 0.5);
+                            if (waitSec <= 0) {
+                                clearInterval(timer);
+                                runAiBatch(res.processed_total, limit, 0);
+                            } else {
+                                $('#ai-progress-detail').html('<i class="fa fa-clock-o text-purple"></i> Jeda aman anti-RPM: <b>' + waitSec.toFixed(1) + 's</b> sebelum batch berikutnya...');
+                            }
+                        }, 500);
                     } else {
                         // Selesai seluruh soal
                         $('#ai-progress-bar').css('width', '100%').text('100%');
@@ -1313,6 +1331,19 @@ if ($ac == '') :
                             renderAiResults();
                         }, 400);
                     }
+                } else if (res.code === 'RATE_LIMIT' && retryCount < 3) {
+                    // Otomatis retry jika terkena batas laju request 429
+                    var retryWait = res.retry_after || 10;
+                    $('#ai-progress-detail').html('<span class="text-yellow"><i class="fa fa-exclamation-triangle"></i> ' + res.message + ' (Percobaan ' + (retryCount + 1) + '/3)... Menunggu <b>' + retryWait + 's</b></span>');
+                    var retryTimer = setInterval(function() {
+                        retryWait--;
+                        if (retryWait <= 0) {
+                            clearInterval(retryTimer);
+                            runAiBatch(offset, limit, retryCount + 1);
+                        } else {
+                            $('#ai-progress-detail').html('<span class="text-yellow"><i class="fa fa-exclamation-triangle"></i> Batas RPM/TPM tercapai. Mengulang otomatis dalam <b>' + retryWait + 's</b> (Percobaan ' + (retryCount + 1) + '/3)...</span>');
+                        }
+                    }, 1000);
                 } else {
                     $('#ai-loading-container').hide();
                     $('#ai-error-container').html(
@@ -1321,10 +1352,17 @@ if ($ac == '') :
                 }
             },
             error: function(xhr) {
-                $('#ai-loading-container').hide();
-                $('#ai-error-container').html(
-                    '<div class="alert alert-danger"><h4><i class="icon fa fa-ban"></i> Error Komunikasi</h4><p>HTTP Error ' + xhr.status + ': ' + xhr.statusText + '</p></div>'
-                ).show();
+                if (retryCount < 2) {
+                    $('#ai-progress-detail').html('<span class="text-yellow"><i class="fa fa-refresh fa-spin"></i> Koneksi terputus/timeout. Mengulang batch dalam 5 detik...</span>');
+                    setTimeout(function() {
+                        runAiBatch(offset, limit, retryCount + 1);
+                    }, 5000);
+                } else {
+                    $('#ai-loading-container').hide();
+                    $('#ai-error-container').html(
+                        '<div class="alert alert-danger"><h4><i class="icon fa fa-ban"></i> Error Komunikasi</h4><p>HTTP Error ' + xhr.status + ': ' + xhr.statusText + '</p></div>'
+                    ).show();
+                }
             }
         });
     }

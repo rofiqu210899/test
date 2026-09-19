@@ -464,25 +464,34 @@ function get_ai_setting($koneksi)
 	$check = mysqli_query($koneksi, "SHOW COLUMNS FROM setting LIKE 'gemini_api_key'");
 	if ($check && mysqli_num_rows($check) == 0) {
 		@mysqli_query($koneksi, "ALTER TABLE setting ADD COLUMN gemini_api_key VARCHAR(255) NULL");
-		@mysqli_query($koneksi, "ALTER TABLE setting ADD COLUMN gemini_model VARCHAR(100) DEFAULT 'gemini-2.5-flash'");
+		@mysqli_query($koneksi, "ALTER TABLE setting ADD COLUMN gemini_model VARCHAR(100) DEFAULT 'gemini-3.5-flash-lite'");
 		@mysqli_query($koneksi, "ALTER TABLE setting ADD COLUMN gemini_status TINYINT(1) DEFAULT 1");
 		@mysqli_query($koneksi, "ALTER TABLE setting ADD COLUMN gemini_prompt TEXT NULL");
 	}
+	$check_rate = mysqli_query($koneksi, "SHOW COLUMNS FROM setting LIKE 'gemini_delay'");
+	if ($check_rate && mysqli_num_rows($check_rate) == 0) {
+		@mysqli_query($koneksi, "ALTER TABLE setting ADD COLUMN gemini_delay DECIMAL(4,1) DEFAULT 4.5");
+		@mysqli_query($koneksi, "ALTER TABLE setting ADD COLUMN gemini_batch_size INT DEFAULT 15");
+	}
 
-	$q = mysqli_query($koneksi, "SELECT gemini_api_key, gemini_model, gemini_status, gemini_prompt FROM setting WHERE id_setting='1'");
+	$q = mysqli_query($koneksi, "SELECT gemini_api_key, gemini_model, gemini_status, gemini_prompt, gemini_delay, gemini_batch_size FROM setting WHERE id_setting='1'");
 	if ($q && $row = mysqli_fetch_assoc($q)) {
 		$ai_setting = [
 			'api_key' => $row['gemini_api_key'] ?? '',
-			'model' => !empty($row['gemini_model']) ? $row['gemini_model'] : 'gemini-2.5-flash',
+			'model' => !empty($row['gemini_model']) ? $row['gemini_model'] : 'gemini-3.5-flash-lite',
 			'status' => isset($row['gemini_status']) ? intval($row['gemini_status']) : 1,
-			'prompt' => $row['gemini_prompt'] ?? ''
+			'prompt' => $row['gemini_prompt'] ?? '',
+			'delay' => isset($row['gemini_delay']) ? floatval($row['gemini_delay']) : 4.5,
+			'batch_size' => isset($row['gemini_batch_size']) && intval($row['gemini_batch_size']) > 0 ? intval($row['gemini_batch_size']) : 15
 		];
 	} else {
 		$ai_setting = [
 			'api_key' => '',
-			'model' => 'gemini-2.5-flash',
+			'model' => 'gemini-3.5-flash-lite',
 			'status' => 1,
-			'prompt' => ''
+			'prompt' => '',
+			'delay' => 4.5,
+			'batch_size' => 15
 		];
 	}
 	return $ai_setting;
