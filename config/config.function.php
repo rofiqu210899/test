@@ -515,7 +515,9 @@ function call_ai_service($config, $systemPrompt, $userPrompt, $options = [])
 	$baseUrl  = trim($config['base_url'] ?? '');
 	$temp     = isset($options['temperature']) ? floatval($options['temperature']) : 0.1;
 	$jsonMode = $options['json_mode'] ?? true;
-	$timeout  = isset($options['timeout']) ? intval($options['timeout']) : 45;
+	$defaultTimeout = ($provider === 'custom') ? 120 : 90;
+	$timeout  = isset($options['timeout']) ? intval($options['timeout']) : $defaultTimeout;
+	if ($timeout <= 0) $timeout = 90;
 
 	if (empty($apiKey) && $provider !== 'custom') {
 		return [
@@ -607,6 +609,7 @@ function call_ai_service($config, $systemPrompt, $userPrompt, $options = [])
 		CURLOPT_POST => true,
 		CURLOPT_POSTFIELDS => json_encode($payload),
 		CURLOPT_HTTPHEADER => $headers,
+		CURLOPT_USERAGENT => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 CandyCBT/2.9',
 		CURLOPT_RETURNTRANSFER => true,
 		CURLOPT_SSL_VERIFYPEER => false,
 		CURLOPT_TIMEOUT => $timeout

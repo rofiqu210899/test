@@ -659,19 +659,20 @@ $ai_set = get_ai_setting($koneksi);
             guide: '<ol style="padding-left:18px;"><li>Buka <a href="https://platform.openai.com/api-keys" target="_blank">OpenAI API Keys</a>.</li><li>Buat API Secret Key.</li><li>Model <b>gpt-4o-mini</b> sangat efisien dan akurat untuk validasi soal.</li></ol>'
         },
         custom: {
-            name: 'Custom / Local AI',
+            name: 'Custom / Local AI / Reverse Proxy',
             keyLabel: 'API Key (Opsional bila tanpa password)',
-            keyPlaceholder: 'Bearer token / sk-... (opsional)',
-            helpText: 'Untuk Ollama lokal biasanya tanpa API Key (bisa diisi apa saja).',
-            defaultModel: 'llama3:8b',
+            keyPlaceholder: 'Bearer token / wzr_live_... / sk-...',
+            helpText: 'Isi token otorisasi jika provider/proxy Anda memerlukannya.',
+            defaultModel: 'wz/gemini-3.8-flash',
             models: [
-                { id: 'llama3:8b', label: 'llama3:8b', badge: 'bg-purple' },
-                { id: 'qwen2.5:7b', label: 'qwen2.5:7b', badge: 'bg-blue' },
-                { id: 'mistral:latest', label: 'mistral:latest', badge: 'bg-green' }
+                { id: 'wz/gemini-3.8-flash', label: '⚡ wz/gemini-3.8-flash (Cepat)', badge: 'bg-green' },
+                { id: 'wz/deepseek-v4-flash', label: 'wz/deepseek-v4-flash', badge: 'bg-purple' },
+                { id: 'wz/deepseek-v4.1-flash', label: 'wz/deepseek-v4.1-flash (Reasoning)', badge: 'bg-yellow' },
+                { id: 'llama3:8b', label: 'llama3:8b (Ollama Lokal)', badge: 'bg-blue' }
             ],
             defaultDelay: 1.0,
-            defaultBatch: 10,
-            guide: '<ol style="padding-left:18px;"><li>Jalankan server lokal, contoh Ollama: <code>ollama run llama3:8b</code>.</li><li>Isi Base URL: <code>http://localhost:11434/v1</code>.</li><li>Tulis nama model yang sedang aktif di lokal Anda.</li><li>Privasi 100% lokal tanpa biaya token!</li></ol>'
+            defaultBatch: 8,
+            guide: '<ol style="padding-left:18px;"><li>Bisa untuk server lokal (Ollama: <code>http://localhost:11434/v1</code>) atau Reverse Proxy kustom (misal: <code>https://weizerouter.web.id/v1</code>).</li><li>Untuk model berpikir mendalam/reasoning (seperti <code>wz/deepseek-v4.1-flash</code>), gunakan batch kecil <b>5 - 8 butir</b> agar tidak timeout.</li><li>Untuk model kilat (seperti <code>wz/gemini-3.8-flash</code>), bisa memproses <b>10 - 15 butir</b> hanya dalam hitungan detik!</li></ol>'
         }
     };
 

@@ -5,6 +5,8 @@ require("../../config/functions.crud.php");
 cek_session_admin();
 
 header('Content-Type: application/json; charset=utf-8');
+@set_time_limit(180);
+@ini_set('max_execution_time', 180);
 
 $action = $_GET['action'] ?? ($_POST['action'] ?? '');
 
@@ -153,25 +155,28 @@ KRITERIA STATUS:
 2. 'KUNCI_SALAH' : Kunci yang tercatat salah, Anda menemukan opsi lain yang terbukti benar menurut kaidah keilmuan.
 3. 'AMBIGU' : Soal memiliki cacat logika, terdapat lebih dari satu jawaban yang benar, atau tidak ada satupun opsi yang benar.
 
-OUTPUT HARUS FORMAT JSON ARRAY MURNI (tanpa teks pembuka/penutup):
-[
-  {
-    \"nomor\": 1,
-    \"id_soal\": 123,
-    \"kunci_sekarang\": \"A\",
-    \"kunci_ai\": \"A\",
-    \"status\": \"SESUAI\",
-    \"alasan\": \"Kunci A tepat karena...\"
-  }
-]";
+OUTPUT WAJIB FORMAT JSON OBJECT BERIKUT (tanpa teks penjelasan pembuka/penutup):
+{
+  \"hasil\": [
+    {
+      \"nomor\": 1,
+      \"id_soal\": 123,
+      \"kunci_sekarang\": \"A\",
+      \"kunci_ai\": \"A\",
+      \"status\": \"SESUAI\",
+      \"alasan\": \"Kunci A tepat karena...\"
+    }
+  ]
+}";
 
     $userPrompt = "Berikut data butir soal yang harus dianalisis:\n" . json_encode($soal_for_prompt, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
 
-    // Panggil Unified AI Engine
+    // Panggil Unified AI Engine (Timeout disesuaikan: 120s untuk custom/reasoning model, 90s default)
+    $timeoutSec = ($ai_set['provider'] === 'custom') ? 120 : 90;
     $call = call_ai_service($ai_set, $sysPrompt, $userPrompt, [
         'temperature' => 0.1,
         'json_mode' => true,
-        'timeout' => 45
+        'timeout' => $timeoutSec
     ]);
 
     if (!$call['success']) {
@@ -194,12 +199,20 @@ OUTPUT HARUS FORMAT JSON ARRAY MURNI (tanpa teks pembuka/penutup):
     $rawAiText = $call['content'];
     $parsedAi = json_decode($rawAiText, true);
 
-    // Tangani jika respon AI terbungkus key (misal {"soal": [...]} atau {"data": [...]})
-    if (is_array($parsedAi) && !isset($parsedAi[0])) {
-        foreach ($parsedAi as $val) {
-            if (is_array($val) && isset($val[0])) {
-                $parsedAi = $val;
-                break;
+    // Tangani jika respon AI terbungkus key (misal {"hasil": [...]}, {"data": [...]}, {"soal": [...]})
+    if (is_array($parsedAi)) {
+        if (isset($parsedAi['hasil']) && is_array($parsedAi['hasil'])) {
+            $parsedAi = $parsedAi['hasil'];
+        } elseif (isset($parsedAi['data']) && is_array($parsedAi['data'])) {
+            $parsedAi = $parsedAi['data'];
+        } elseif (isset($parsedAi['soal']) && is_array($parsedAi['soal'])) {
+            $parsedAi = $parsedAi['soal'];
+        } elseif (!isset($parsedAi[0])) {
+            foreach ($parsedAi as $val) {
+                if (is_array($val) && isset($val[0])) {
+                    $parsedAi = $val;
+                    break;
+                }
             }
         }
     }
