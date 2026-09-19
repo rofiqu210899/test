@@ -1370,88 +1370,95 @@ if ($ac == '') :
     }
 
     function renderAiResults() {
-        var total = aiResults.length;
-        var sesuai = 0;
-        var salah = 0;
-        var tidak_logis = 0;
-        var cacat_acak = 0;
+        try {
+            var total = aiResults.length;
+            var sesuai = 0;
+            var salah = 0;
+            var tidak_logis = 0;
+            var cacat_acak = 0;
 
-        var tbody = $('#tbody-hasil-ai');
-        tbody.empty();
+            var tbody = $('#tbody-hasil-ai');
+            tbody.empty();
 
-        aiResults.forEach(function(item) {
-            var st = item.status;
-            if (st === 'SESUAI') sesuai++;
-            else if (st === 'KUNCI_SALAH') salah++;
-            else if (st === 'CACAT_ACAK') cacat_acak++;
-            else if (st === 'TIDAK_LOGIS' || st === 'AMBIGU') {
-                tidak_logis++;
-                st = 'TIDAK_LOGIS';
+            aiResults.forEach(function(item) {
+                var st = item.status;
+                if (st === 'SESUAI') sesuai++;
+                else if (st === 'KUNCI_SALAH') salah++;
+                else if (st === 'CACAT_ACAK') cacat_acak++;
+                else if (st === 'TIDAK_LOGIS' || st === 'AMBIGU') {
+                    tidak_logis++;
+                    st = 'TIDAK_LOGIS';
+                } else {
+                    sesuai++;
+                    st = 'SESUAI';
+                }
+
+                var badgeClass = 'label-success';
+                var badgeStyle = '';
+                var badgeText = '<i class="fa fa-check-circle"></i> SESUAI';
+
+                if (st === 'KUNCI_SALAH') {
+                    badgeClass = 'label-danger';
+                    badgeText = '<i class="fa fa-times-circle"></i> KUNCI SALAH';
+                } else if (st === 'CACAT_ACAK') {
+                    badgeClass = 'label-default';
+                    badgeStyle = 'background-color: #605ca8; color: #fff;';
+                    badgeText = '<i class="fa fa-random"></i> CACAT ACAK';
+                } else if (st === 'TIDAK_LOGIS') {
+                    badgeClass = 'label-warning';
+                    badgeStyle = 'background-color: #f39c12; color: #fff;';
+                    badgeText = '<i class="fa fa-exclamation-triangle"></i> TIDAK LOGIS';
+                }
+
+                var btnAksi = '-';
+                if (st === 'KUNCI_SALAH' && item.kunci_ai) {
+                    btnAksi = '<button type="button" class="btn btn-xs btn-danger btn-flat btn-apply-key" data-id="' + item.id_soal + '" data-nomor="' + item.nomor + '" data-kunci="' + item.kunci_ai + '" title="Terapkan Kunci Rekomendasi AI">' +
+                              '<i class="fa fa-check"></i> Ubah ke ' + item.kunci_ai + '</button>';
+                } else if (st === 'CACAT_ACAK' || st === 'TIDAK_LOGIS') {
+                    var mapelLink = currentAiMapelId ? '?pg=banksoal&ac=lihat&id=' + currentAiMapelId : '#';
+                    btnAksi = '<a href="' + mapelLink + '" target="_blank" class="btn btn-xs btn-default btn-flat" style="border-color: #ccc;" title="Buka dan Perbaiki Soal Ini">' +
+                              '<i class="fa fa-pencil text-purple"></i> Edit Soal</a>';
+                }
+
+                var row = '<tr class="row-hasil-ai" data-status="' + st + '" id="row-soal-' + item.id_soal + '">' +
+                    '<td style="text-align: center; font-weight: bold;">' + item.nomor + '</td>' +
+                    '<td>' + (item.soal_preview || '-') + '</td>' +
+                    '<td style="text-align: center;"><span class="badge bg-gray" id="lbl-cbt-' + item.id_soal + '" style="font-size: 13px;">' + (item.kunci_sekarang || '-') + '</span></td>' +
+                    '<td style="text-align: center;"><span class="badge bg-purple" style="font-size: 13px;">' + (item.kunci_ai || '-') + '</span></td>' +
+                    '<td style="text-align: center;"><span class="label ' + badgeClass + '" id="lbl-status-' + item.id_soal + '" style="font-size: 11px;' + badgeStyle + '">' + badgeText + '</span></td>' +
+                    '<td style="font-size: 12px; color: #333;">' + (item.alasan || '-') + '</td>' +
+                    '<td style="text-align: center;" id="col-aksi-' + item.id_soal + '">' + btnAksi + '</td>' +
+                    '</tr>';
+                tbody.append(row);
+            });
+
+            $('#kpi-total').text(total);
+            $('#kpi-sesuai').text(sesuai);
+            $('#kpi-salah').text(salah);
+            $('#kpi-logis').text(tidak_logis);
+            $('#kpi-acak').text(cacat_acak);
+
+            $('#count-filter-all').text(total);
+            $('#count-filter-sesuai').text(sesuai);
+            $('#count-filter-salah').text(salah);
+            $('#count-filter-logis').text(tidak_logis);
+            $('#count-filter-acak').text(cacat_acak);
+
+            if (salah > 0) {
+                $('#btn-terapkan-semua-ai').show();
             } else {
-                sesuai++;
-                st = 'SESUAI';
+                $('#btn-terapkan-semua-ai').hide();
             }
 
-            var badgeClass = 'label-success';
-            var badgeStyle = '';
-            var badgeText = '<i class="fa fa-check-circle"></i> SESUAI';
+            $('#ai-filter-group button').removeClass('active');
+            $('#ai-filter-group button[data-filter="all"]').addClass('active');
 
-            if (st === 'KUNCI_SALAH') {
-                badgeClass = 'label-danger';
-                badgeText = '<i class="fa fa-times-circle"></i> KUNCI SALAH';
-            } else if (st === 'CACAT_ACAK') {
-                badgeClass = 'label-default';
-                badgeStyle = 'background-color: #605ca8; color: #fff;';
-                badgeText = '<i class="fa fa-random"></i> CACAT ACAK';
-            } else if (st === 'TIDAK_LOGIS') {
-                badgeClass = 'label-warning';
-                badgeStyle = 'background-color: #f39c12; color: #fff;';
-                badgeText = '<i class="fa fa-exclamation-triangle"></i> TIDAK LOGIS';
-            }
-
-            var btnAksi = '-';
-            if (st === 'KUNCI_SALAH' && item.kunci_ai) {
-                btnAksi = '<button type="button" class="btn btn-xs btn-danger btn-flat btn-apply-key" data-id="' + item.id_soal + '" data-nomor="' + item.nomor + '" data-kunci="' + item.kunci_ai + '" title="Terapkan Kunci Rekomendasi AI">' +
-                          '<i class="fa fa-check"></i> Ubah ke ' + item.kunci_ai + '</button>';
-            } else if (st === 'CACAT_ACAK' || st === 'TIDAK_LOGIS') {
-                btnAksi = '<a href="?pg=banksoal&ac=lihat&id=' + currentMapelId + '" target="_blank" class="btn btn-xs btn-default btn-flat" style="border-color: #ccc;" title="Buka dan Perbaiki Soal Ini">' +
-                          '<i class="fa fa-pencil text-purple"></i> Edit Soal</a>';
-            }
-
-            var row = '<tr class="row-hasil-ai" data-status="' + st + '" id="row-soal-' + item.id_soal + '">' +
-                '<td style="text-align: center; font-weight: bold;">' + item.nomor + '</td>' +
-                '<td>' + (item.soal_preview || '-') + '</td>' +
-                '<td style="text-align: center;"><span class="badge bg-gray" id="lbl-cbt-' + item.id_soal + '" style="font-size: 13px;">' + (item.kunci_sekarang || '-') + '</span></td>' +
-                '<td style="text-align: center;"><span class="badge bg-purple" style="font-size: 13px;">' + (item.kunci_ai || '-') + '</span></td>' +
-                '<td style="text-align: center;"><span class="label ' + badgeClass + '" id="lbl-status-' + item.id_soal + '" style="font-size: 11px;' + badgeStyle + '">' + badgeText + '</span></td>' +
-                '<td style="font-size: 12px; color: #333;">' + (item.alasan || '-') + '</td>' +
-                '<td style="text-align: center;" id="col-aksi-' + item.id_soal + '">' + btnAksi + '</td>' +
-                '</tr>';
-            tbody.append(row);
-        });
-
-        $('#kpi-total').text(total);
-        $('#kpi-sesuai').text(sesuai);
-        $('#kpi-salah').text(salah);
-        $('#kpi-logis').text(tidak_logis);
-        $('#kpi-acak').text(cacat_acak);
-
-        $('#count-filter-all').text(total);
-        $('#count-filter-sesuai').text(sesuai);
-        $('#count-filter-salah').text(salah);
-        $('#count-filter-logis').text(tidak_logis);
-        $('#count-filter-acak').text(cacat_acak);
-
-        if (salah > 0) {
-            $('#btn-terapkan-semua-ai').show();
-        } else {
-            $('#btn-terapkan-semua-ai').hide();
+            $('#ai-result-container').show();
+        } catch (err) {
+            console.error('Error in renderAiResults:', err);
+            $('#ai-error-container').html('<div class="alert alert-danger"><i class="fa fa-ban"></i> Terjadi kesalahan saat menampilkan hasil analisis: ' + err.message + '</div>').show();
+            $('#ai-result-container').show();
         }
-
-        $('#ai-filter-group button').removeClass('active');
-        $('#ai-filter-group button[data-filter="all"]').addClass('active');
-
-        $('#ai-result-container').slideDown();
     }
 
     // Filter baris hasil analisis
