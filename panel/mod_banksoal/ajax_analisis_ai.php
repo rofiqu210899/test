@@ -92,8 +92,8 @@ if ($action == 'analisis') {
     while ($r = mysqli_fetch_assoc($q_soal)) {
         // Bersihkan HTML tag berlebih untuk efisiensi token prompt (Anti-TPM Peak)
         $clean_soal = trim(strip_tags(str_replace(['<br>', '<br/>', '<br />', '</p>'], "\n", $r['soal'])));
-        if (mb_strlen($clean_soal) > 1000) {
-            $clean_soal = mb_substr($clean_soal, 0, 1000) . '... [dipersingkat]';
+        if (mb_strlen($clean_soal) > 2000) {
+            $clean_soal = mb_substr($clean_soal, 0, 2000) . '... [dipersingkat]';
         }
         $cleanA = trim(strip_tags($r['pilA']));
         $cleanB = trim(strip_tags($r['pilB']));
@@ -142,18 +142,38 @@ if ($action == 'analisis') {
     $mapelName = $mapel['nama'] ?? $mapel['kode'];
     $systemPersona = !empty($ai_set['prompt'])
         ? $ai_set['prompt']
-        : "Anda adalah Validator & Reviewer Soal Ujian dan Pakar Kurikulum Sekolah Profesional tingkat SMP/MTs/SMA.";
+        : "Anda adalah Validator & Quality Assurance Soal Ujian Profesional tingkat SMP/MTs/SMA berbasis CBT.";
 
     $sysPrompt = "{$systemPersona}
 Mata Pelajaran: {$mapelName} (Level/Kelas: {$mapel['level']}).
 
 TUGAS ANDA:
-Analisis setiap butir soal pilihan ganda berikut. Tentukan apakah 'kunci_tercatat' sudah SESUAI atau TIDAK SESUAI (KUNCI SALAH) atau AMBIGU (opsi ganda/tidak ada opsi benar/soal rancu).
+Lakukan audit, validasi kelayakan, dan verifikasi butir soal pilihan ganda berikut untuk persiapan ujian Computer-Based Testing (CBT).
 
-KRITERIA STATUS:
-1. 'SESUAI' : Kunci yang tercatat sudah tepat dan benar secara akademis.
-2. 'KUNCI_SALAH' : Kunci yang tercatat salah, Anda menemukan opsi lain yang terbukti benar menurut kaidah keilmuan.
-3. 'AMBIGU' : Soal memiliki cacat logika, terdapat lebih dari satu jawaban yang benar, atau tidak ada satupun opsi yang benar.
+PERINGATAN SISTEM CBT:
+Dalam ujian CBT ini, SELURUH NOMOR SOAL AKAN DIACAK (SHUFFLE) SECARA OTOMATIS saat dikerjakan oleh siswa. Setiap butir soal WAJIB BERDIRI SENDIRI (MANDIRI) dan TIDAK BOLEH mengasumsikan urutan nomor soal tetap berurutan!
+
+KRITERIA STATUS HASIL ANALISIS (Pilih salah satu status yang paling tepat):
+1. 'CACAT_ACAK' (Prioritas Deteksi Anomali Pengacakan CBT):
+   - Soal merujuk pada nomor urut soal tertentu atau mengasumsikan urutan nomor soal tetap berurutan.
+   - Contoh kasus CACAT_ACAK:
+     * Teks memuat kalimat 'Bacalah teks berikut untuk menjawab soal nomor 1-5' atau 'Soal nomor 3 s.d. 5'.
+     * Teks memuat rujukan 'Berdasarkan kutipan pada soal nomor 2...', 'Perhatikan jawaban pada soal sebelumnya...'.
+     * Butir soal membutuhkan teks bacaan/gambar/stimulus yang hanya ada di nomor lain dan tidak disertakan di butir soal ini.
+   - Dampak: Karena sistem CBT mengacak nomor butir soal, siswa akan kehilangan stimulus atau salah paham membaca nomor rujukan.
+   - Jelaskan di 'alasan' mengapa cacat acak dan berikan saran perbaikan (contoh: 'Sertakan teks stimulus langsung di butir soal ini dan hilangkan kalimat rujukan nomor 1-5').
+
+2. 'TIDAK_LOGIS' (Anomali Kelogisan / Pilihan Ganda Tertukar / Format Rusak):
+   - Soal tidak masuk akal, kalimat rancu/rusak, atau susunan soal acak-acakan.
+   - OPSI JAWABAN TERTUKAR DENGAN NOMOR LAIN: Pertanyaan dan pilihan ganda sama sekali tidak nyambung (contoh: pertanyaan menanyakan sinonim kata Bahasa Indonesia, tetapi opsi jawabannya adalah rumus atau opsi dari nomor soal lain yang keliru di-copy-paste).
+   - Ambigu: Tidak ada satupun opsi yang benar, ATAU terdapat lebih dari satu opsi jawaban yang sama-sama benar.
+
+3. 'KUNCI_SALAH' (Kunci Jawaban CBT Keliru):
+   - Soal logis, mandiri (ramah pengacakan CBT), dan opsi jawaban nyambung, TETAPI kunci jawaban yang tercatat saat ini di CBT salah.
+   - AI menemukan opsi jawaban yang terbukti benar menurut kaidah keilmuan. Wajib cantumkan huruf opsi yang benar pada 'kunci_ai'.
+
+4. 'SESUAI' (Soal Valid, Mandiri & Kunci Benar):
+   - Soal logis, mandiri (tidak merujuk nomor lain), opsi jawaban sinkron, dan kunci jawaban yang tercatat di CBT sudah tepat.
 
 OUTPUT WAJIB FORMAT JSON OBJECT BERIKUT (tanpa teks penjelasan pembuka/penutup):
 {
@@ -164,10 +184,13 @@ OUTPUT WAJIB FORMAT JSON OBJECT BERIKUT (tanpa teks penjelasan pembuka/penutup):
       \"kunci_sekarang\": \"A\",
       \"kunci_ai\": \"A\",
       \"status\": \"SESUAI\",
-      \"alasan\": \"Kunci A tepat karena...\"
+      \"alasan\": \"Penjelasan ringkas, spesifik, dan solutif.\"
     }
   ]
-}";
+}
+Catatan:
+- Nilai 'status' HANYA boleh salah satu dari: 'SESUAI', 'KUNCI_SALAH', 'TIDAK_LOGIS', 'CACAT_ACAK'.
+- Jika berstatus 'CACAT_ACAK' atau 'TIDAK_LOGIS', tetap rekomendasikan 'kunci_ai' jika ada opsi yang paling tepat, atau kosongkan (\"\") jika tidak ada.";
 
     $userPrompt = "Berikut data butir soal yang harus dianalisis:\n" . json_encode($soal_for_prompt, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
 
@@ -232,8 +255,16 @@ OUTPUT WAJIB FORMAT JSON OBJECT BERIKUT (tanpa teks penjelasan pembuka/penutup):
         $num = intval($item['nomor'] ?? 0);
         $local = $soal_list[$num] ?? null;
 
-        $st = strtoupper(trim($item['status'] ?? 'SESUAI'));
-        if (!in_array($st, ['SESUAI', 'KUNCI_SALAH', 'AMBIGU'])) {
+        $rawStatus = strtoupper(trim($item['status'] ?? 'SESUAI'));
+        $st = 'SESUAI';
+
+        if (strpos($rawStatus, 'ACAK') !== false) {
+            $st = 'CACAT_ACAK';
+        } elseif (strpos($rawStatus, 'LOGIS') !== false || strpos($rawStatus, 'AMBIGU') !== false || strpos($rawStatus, 'TUKAR') !== false || strpos($rawStatus, 'RANCU') !== false) {
+            $st = 'TIDAK_LOGIS';
+        } elseif (strpos($rawStatus, 'SALAH') !== false) {
+            $st = 'KUNCI_SALAH';
+        } elseif ($rawStatus === 'SESUAI') {
             $st = 'SESUAI';
         }
 

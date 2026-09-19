@@ -1373,7 +1373,8 @@ if ($ac == '') :
         var total = aiResults.length;
         var sesuai = 0;
         var salah = 0;
-        var ambigu = 0;
+        var tidak_logis = 0;
+        var cacat_acak = 0;
 
         var tbody = $('#tbody-hasil-ai');
         tbody.empty();
@@ -1382,22 +1383,39 @@ if ($ac == '') :
             var st = item.status;
             if (st === 'SESUAI') sesuai++;
             else if (st === 'KUNCI_SALAH') salah++;
-            else if (st === 'AMBIGU') ambigu++;
+            else if (st === 'CACAT_ACAK') cacat_acak++;
+            else if (st === 'TIDAK_LOGIS' || st === 'AMBIGU') {
+                tidak_logis++;
+                st = 'TIDAK_LOGIS';
+            } else {
+                sesuai++;
+                st = 'SESUAI';
+            }
 
             var badgeClass = 'label-success';
-            var badgeText = 'SESUAI';
+            var badgeStyle = '';
+            var badgeText = '<i class="fa fa-check-circle"></i> SESUAI';
+
             if (st === 'KUNCI_SALAH') {
                 badgeClass = 'label-danger';
-                badgeText = 'KUNCI SALAH';
-            } else if (st === 'AMBIGU') {
+                badgeText = '<i class="fa fa-times-circle"></i> KUNCI SALAH';
+            } else if (st === 'CACAT_ACAK') {
+                badgeClass = 'label-default';
+                badgeStyle = 'background-color: #605ca8; color: #fff;';
+                badgeText = '<i class="fa fa-random"></i> CACAT ACAK';
+            } else if (st === 'TIDAK_LOGIS') {
                 badgeClass = 'label-warning';
-                badgeText = 'AMBIGU';
+                badgeStyle = 'background-color: #f39c12; color: #fff;';
+                badgeText = '<i class="fa fa-exclamation-triangle"></i> TIDAK LOGIS';
             }
 
             var btnAksi = '-';
             if (st === 'KUNCI_SALAH' && item.kunci_ai) {
                 btnAksi = '<button type="button" class="btn btn-xs btn-danger btn-flat btn-apply-key" data-id="' + item.id_soal + '" data-nomor="' + item.nomor + '" data-kunci="' + item.kunci_ai + '" title="Terapkan Kunci Rekomendasi AI">' +
                           '<i class="fa fa-check"></i> Ubah ke ' + item.kunci_ai + '</button>';
+            } else if (st === 'CACAT_ACAK' || st === 'TIDAK_LOGIS') {
+                btnAksi = '<a href="?pg=banksoal&ac=lihat&id=' + currentMapelId + '" target="_blank" class="btn btn-xs btn-default btn-flat" style="border-color: #ccc;" title="Buka dan Perbaiki Soal Ini">' +
+                          '<i class="fa fa-pencil text-purple"></i> Edit Soal</a>';
             }
 
             var row = '<tr class="row-hasil-ai" data-status="' + st + '" id="row-soal-' + item.id_soal + '">' +
@@ -1405,8 +1423,8 @@ if ($ac == '') :
                 '<td>' + (item.soal_preview || '-') + '</td>' +
                 '<td style="text-align: center;"><span class="badge bg-gray" id="lbl-cbt-' + item.id_soal + '" style="font-size: 13px;">' + (item.kunci_sekarang || '-') + '</span></td>' +
                 '<td style="text-align: center;"><span class="badge bg-purple" style="font-size: 13px;">' + (item.kunci_ai || '-') + '</span></td>' +
-                '<td style="text-align: center;"><span class="label ' + badgeClass + '" id="lbl-status-' + item.id_soal + '" style="font-size: 11px;">' + badgeText + '</span></td>' +
-                '<td style="font-size: 12px; color: #444;">' + (item.alasan || '-') + '</td>' +
+                '<td style="text-align: center;"><span class="label ' + badgeClass + '" id="lbl-status-' + item.id_soal + '" style="font-size: 11px;' + badgeStyle + '">' + badgeText + '</span></td>' +
+                '<td style="font-size: 12px; color: #333;">' + (item.alasan || '-') + '</td>' +
                 '<td style="text-align: center;" id="col-aksi-' + item.id_soal + '">' + btnAksi + '</td>' +
                 '</tr>';
             tbody.append(row);
@@ -1415,12 +1433,14 @@ if ($ac == '') :
         $('#kpi-total').text(total);
         $('#kpi-sesuai').text(sesuai);
         $('#kpi-salah').text(salah);
-        $('#kpi-ambigu').text(ambigu);
+        $('#kpi-logis').text(tidak_logis);
+        $('#kpi-acak').text(cacat_acak);
 
         $('#count-filter-all').text(total);
         $('#count-filter-sesuai').text(sesuai);
         $('#count-filter-salah').text(salah);
-        $('#count-filter-ambigu').text(ambigu);
+        $('#count-filter-logis').text(tidak_logis);
+        $('#count-filter-acak').text(cacat_acak);
 
         if (salah > 0) {
             $('#btn-terapkan-semua-ai').show();
@@ -1442,6 +1462,9 @@ if ($ac == '') :
 
         if (filter === 'all') {
             $('.row-hasil-ai').show();
+        } else if (filter === 'TIDAK_LOGIS') {
+            $('.row-hasil-ai').hide();
+            $('.row-hasil-ai[data-status="TIDAK_LOGIS"], .row-hasil-ai[data-status="AMBIGU"]').show();
         } else {
             $('.row-hasil-ai').hide();
             $('.row-hasil-ai[data-status="' + filter + '"]').show();
@@ -1577,8 +1600,8 @@ if ($ac == '') :
 
                 <div id="ai-pre-analysis" style="display: none;">
                     <div class="callout callout-info" style="border-left-color: #605ca8; background: #fff; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); color: #333;">
-                        <h4 style="color: #605ca8; font-weight: 600;"><i class="fa fa-info-circle"></i> Siap Melakukan Validasi Soal</h4>
-                        <p style="margin-bottom: 5px;">Google Gemini AI akan meneliti setiap teks soal, opsi jawaban (A, B, C, D, E), dan membandingkannya dengan kunci jawaban saat ini.</p>
+                        <h4 style="color: #605ca8; font-weight: 600;"><i class="fa fa-info-circle"></i> Siap Melakukan Validasi Kualitas Soal</h4>
+                        <p style="margin-bottom: 5px;">AI akan mengaudit setiap butir soal: kesesuaian kunci jawaban, kelogisan teks & opsi (mendeteksi opsi tertukar/rancu), serta <b>anomali pengacakan CBT</b> (soal yang merujuk nomor butir lain seperti <i>"soal ini digunakan untuk nomor 1-5"</i> yang berpotensi memicu miss pemahaman siswa saat soal diacak).</p>
                         <p style="margin-bottom: 0;"><b>Total Soal Pilihan Ganda:</b> <span class="badge bg-purple" id="ai-total-soal-ready" style="font-size: 14px;">0</span> butir soal.</p>
                     </div>
                     <div class="text-center" style="margin: 25px 0 15px 0;">
@@ -1591,8 +1614,8 @@ if ($ac == '') :
                 <div id="ai-loading-container" style="display: none; padding: 25px 15px;">
                     <div class="text-center" style="margin-bottom: 15px;">
                         <i class="fa fa-robot fa-spin fa-3x text-purple" style="margin-bottom: 12px;"></i>
-                        <h4 id="ai-progress-status" style="font-weight: 600; color: #333; margin-top: 0;">Menganalisis Butir Soal dengan Gemini AI...</h4>
-                        <p class="text-muted" id="ai-progress-detail" style="font-size: 13px;">Menghubungkan ke API Gemini...</p>
+                        <h4 id="ai-progress-status" style="font-weight: 600; color: #333; margin-top: 0;">Menganalisis Butir Soal dengan AI...</h4>
+                        <p class="text-muted" id="ai-progress-detail" style="font-size: 13px;">Menghubungkan ke API AI Engine...</p>
                     </div>
                     <div class="progress progress-striped active" style="height: 24px; border-radius: 12px; margin-bottom: 8px; background: #e9ecef;">
                         <div id="ai-progress-bar" class="progress-bar progress-bar-purple" role="progressbar" style="width: 0%; line-height: 24px; font-weight: bold; font-size: 12px; background-color: #605ca8;">0%</div>
@@ -1604,39 +1627,48 @@ if ($ac == '') :
 
                 <div id="ai-result-container" style="display: none;">
                     <div class="row" style="margin-bottom: 15px;">
-                        <div class="col-md-3 col-xs-6">
-                            <div class="info-box bg-aqua" style="border-radius: 5px; min-height: 70px;">
-                                <span class="info-box-icon" style="height: 70px; line-height: 70px; background: rgba(0,0,0,0.1); font-size: 32px;"><i class="fa fa-list-ol"></i></span>
-                                <div class="info-box-content">
+                        <div class="col-md-2 col-xs-6" style="padding-right: 5px; padding-left: 10px;">
+                            <div class="info-box bg-aqua" style="border-radius: 5px; min-height: 68px;">
+                                <span class="info-box-icon" style="height: 68px; line-height: 68px; background: rgba(0,0,0,0.1); font-size: 26px;"><i class="fa fa-list-ol"></i></span>
+                                <div class="info-box-content" style="padding-left: 5px;">
                                     <span class="info-box-text" style="font-size: 11px;">Total Soal</span>
-                                    <span class="info-box-number" id="kpi-total" style="font-size: 22px;">0</span>
+                                    <span class="info-box-number" id="kpi-total" style="font-size: 20px;">0</span>
                                 </div>
                             </div>
                         </div>
-                        <div class="col-md-3 col-xs-6">
-                            <div class="info-box bg-green" style="border-radius: 5px; min-height: 70px;">
-                                <span class="info-box-icon" style="height: 70px; line-height: 70px; background: rgba(0,0,0,0.1); font-size: 32px;"><i class="fa fa-check-circle"></i></span>
-                                <div class="info-box-content">
+                        <div class="col-md-2 col-xs-6" style="padding-right: 5px; padding-left: 5px;">
+                            <div class="info-box bg-green" style="border-radius: 5px; min-height: 68px;">
+                                <span class="info-box-icon" style="height: 68px; line-height: 68px; background: rgba(0,0,0,0.1); font-size: 26px;"><i class="fa fa-check-circle"></i></span>
+                                <div class="info-box-content" style="padding-left: 5px;">
                                     <span class="info-box-text" style="font-size: 11px;">Kunci Sesuai</span>
-                                    <span class="info-box-number" id="kpi-sesuai" style="font-size: 22px;">0</span>
+                                    <span class="info-box-number" id="kpi-sesuai" style="font-size: 20px;">0</span>
                                 </div>
                             </div>
                         </div>
-                        <div class="col-md-3 col-xs-6">
-                            <div class="info-box bg-red" style="border-radius: 5px; min-height: 70px;">
-                                <span class="info-box-icon" style="height: 70px; line-height: 70px; background: rgba(0,0,0,0.1); font-size: 32px;"><i class="fa fa-times-circle"></i></span>
-                                <div class="info-box-content">
+                        <div class="col-md-3 col-xs-6" style="padding-right: 5px; padding-left: 5px;">
+                            <div class="info-box bg-red" style="border-radius: 5px; min-height: 68px;">
+                                <span class="info-box-icon" style="height: 68px; line-height: 68px; background: rgba(0,0,0,0.1); font-size: 26px;"><i class="fa fa-times-circle"></i></span>
+                                <div class="info-box-content" style="padding-left: 5px;">
                                     <span class="info-box-text" style="font-size: 11px;">Kunci Salah</span>
-                                    <span class="info-box-number" id="kpi-salah" style="font-size: 22px;">0</span>
+                                    <span class="info-box-number" id="kpi-salah" style="font-size: 20px;">0</span>
                                 </div>
                             </div>
                         </div>
-                        <div class="col-md-3 col-xs-6">
-                            <div class="info-box bg-yellow" style="border-radius: 5px; min-height: 70px;">
-                                <span class="info-box-icon" style="height: 70px; line-height: 70px; background: rgba(0,0,0,0.1); font-size: 32px;"><i class="fa fa-exclamation-triangle"></i></span>
-                                <div class="info-box-content">
-                                    <span class="info-box-text" style="font-size: 11px;">Ambigu / Cacat</span>
-                                    <span class="info-box-number" id="kpi-ambigu" style="font-size: 22px;">0</span>
+                        <div class="col-md-3 col-xs-6" style="padding-right: 5px; padding-left: 5px;">
+                            <div class="info-box bg-yellow" style="border-radius: 5px; min-height: 68px;">
+                                <span class="info-box-icon" style="height: 68px; line-height: 68px; background: rgba(0,0,0,0.1); font-size: 26px;"><i class="fa fa-exclamation-triangle"></i></span>
+                                <div class="info-box-content" style="padding-left: 5px;">
+                                    <span class="info-box-text" style="font-size: 11px;">Tidak Logis / Tertukar</span>
+                                    <span class="info-box-number" id="kpi-logis" style="font-size: 20px;">0</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-2 col-xs-12" style="padding-right: 10px; padding-left: 5px;">
+                            <div class="info-box bg-purple" style="border-radius: 5px; min-height: 68px;">
+                                <span class="info-box-icon" style="height: 68px; line-height: 68px; background: rgba(0,0,0,0.1); font-size: 26px;"><i class="fa fa-random"></i></span>
+                                <div class="info-box-content" style="padding-left: 5px;">
+                                    <span class="info-box-text" style="font-size: 11px;">Cacat Acak</span>
+                                    <span class="info-box-number" id="kpi-acak" style="font-size: 20px;">0</span>
                                 </div>
                             </div>
                         </div>
@@ -1646,7 +1678,8 @@ if ($ac == '') :
                         <div class="btn-group" id="ai-filter-group">
                             <button type="button" class="btn btn-default btn-sm active" data-filter="all">Semua (<span id="count-filter-all">0</span>)</button>
                             <button type="button" class="btn btn-default btn-sm text-red" data-filter="KUNCI_SALAH"><i class="fa fa-times-circle"></i> Kunci Salah (<span id="count-filter-salah">0</span>)</button>
-                            <button type="button" class="btn btn-default btn-sm text-yellow" data-filter="AMBIGU"><i class="fa fa-exclamation-triangle"></i> Ambigu (<span id="count-filter-ambigu">0</span>)</button>
+                            <button type="button" class="btn btn-default btn-sm text-yellow" data-filter="TIDAK_LOGIS"><i class="fa fa-exclamation-triangle"></i> Tidak Logis / Tertukar (<span id="count-filter-logis">0</span>)</button>
+                            <button type="button" class="btn btn-default btn-sm text-purple" data-filter="CACAT_ACAK"><i class="fa fa-random"></i> Cacat Acak (<span id="count-filter-acak">0</span>)</button>
                             <button type="button" class="btn btn-default btn-sm text-green" data-filter="SESUAI"><i class="fa fa-check-circle"></i> Sesuai (<span id="count-filter-sesuai">0</span>)</button>
                         </div>
                         <div>
