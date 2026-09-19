@@ -11,6 +11,75 @@ header('Content-Type: application/json; charset=utf-8');
 $action = $_GET['action'] ?? ($_POST['action'] ?? '');
 
 // ============================================================
+// HELPER: DETEKSI SOAL GANDA / DUPLIKAT KOMPREHENSIF
+// ============================================================
+function detect_mapel_duplicates($koneksi, $id_mapel) {
+    $q = mysqli_query($koneksi, "SELECT id_soal, nomor, soal, pilA, pilB FROM soal WHERE id_mapel='$id_mapel' AND jenis='1' ORDER BY id_soal ASC");
+    $items = [];
+    while ($row = mysqli_fetch_assoc($q)) {
+        $clean_text = preg_replace('/[^a-z0-9]/', '', strtolower(strip_tags(html_entity_decode($row['soal'], ENT_QUOTES, 'UTF-8'))));
+        $clean_opsi = preg_replace('/[^a-z0-9]/', '', strtolower(strip_tags(html_entity_decode($row['pilA'] . $row['pilB'], ENT_QUOTES, 'UTF-8'))));
+        $items[] = [
+            'id_soal' => (int)$row['id_soal'],
+            'nomor' => (int)$row['nomor'],
+            'clean_text' => $clean_text,
+            'clean_opsi' => $clean_opsi,
+            'len' => strlen($clean_text)
+        ];
+    }
+
+    $dup_map = [];
+    $n = count($items);
+    for ($i = 0; $i < $n; $i++) {
+        for ($j = $i + 1; $j < $n; $j++) {
+            $t1 = $items[$i]['clean_text'];
+            $t2 = $items[$j]['clean_text'];
+            $o1 = $items[$i]['clean_opsi'];
+            $o2 = $items[$j]['clean_opsi'];
+            if (empty($t1) || empty($t2)) continue;
+
+            $is_dup = false;
+            $percent = 0;
+
+            // 1. Teks soal identik 100%
+            if ($t1 === $t2) {
+                if ($o1 === $o2 || empty($o1) || empty($o2)) {
+                    $is_dup = true;
+                    $percent = 100;
+                }
+            } elseif ($items[$i]['len'] > 20 && $items[$j]['len'] > 20) {
+                // 2. Teks soal mirip >= 88% DAN opsi pilihan ganda identik atau mirip >= 80%
+                similar_text($t1, $t2, $sim_text);
+                if ($sim_text >= 88.0) {
+                    if ($o1 === $o2 && !empty($o1)) {
+                        $is_dup = true;
+                        $percent = round($sim_text, 1);
+                    } else {
+                        similar_text($o1, $o2, $sim_opsi);
+                        if ($sim_opsi >= 80.0) {
+                            $is_dup = true;
+                            $percent = round(($sim_text + $sim_opsi) / 2, 1);
+                        }
+                    }
+                }
+            }
+
+            if ($is_dup) {
+                $second_id = $items[$j]['id_soal'];
+                if (!isset($dup_map[$second_id])) {
+                    $dup_map[$second_id] = [
+                        'dup_id' => $items[$i]['id_soal'],
+                        'dup_nomor' => $items[$i]['nomor'],
+                        'percent' => $percent
+                    ];
+                }
+            }
+        }
+    }
+    return $dup_map;
+}
+
+// ============================================================
 // 1. INFO MAPEL & STATUS AI
 // ============================================================
 if ($action == 'info') {
@@ -84,7 +153,10 @@ if ($action == 'analisis') {
     $mapel = mysqli_fetch_assoc(mysqli_query($koneksi, "SELECT * FROM mapel WHERE id_mapel='$id_mapel'"));
     $total_all = mysqli_num_rows(mysqli_query($koneksi, "SELECT id_soal FROM soal WHERE id_mapel='$id_mapel' AND jenis='1'"));
 
-    $q_soal = mysqli_query($koneksi, "SELECT id_soal, nomor, soal, pilA, pilB, pilC, pilD, pilE, jawaban FROM soal WHERE id_mapel='$id_mapel' AND jenis='1' ORDER BY nomor ASC LIMIT $offset, $limit");
+    // Peta seluruh soal ganda/duplikat dalam bank soal ini
+    $duplicate_map = detect_mapel_duplicates($koneksi, $id_mapel);
+
+    $q_soal = mysqli_query($koneksi, "SELECT id_soal, nomor, soal, pilA, pilB, pilC, pilD, pilE, jawaban FROM soal WHERE id_mapel='$id_mapel' AND jenis='1' ORDER BY id_soal ASC LIMIT $offset, $limit");
 
     $soal_list = [];
     $soal_for_prompt = [];
@@ -101,12 +173,16 @@ if ($action == 'analisis') {
         $cleanD = trim(strip_tags($r['pilD']));
         $cleanE = trim(strip_tags($r['pilE']));
 
-        $soal_list[$r['nomor']] = [
+        $item_info = [
             'id_soal' => (int)$r['id_soal'],
             'nomor' => (int)$r['nomor'],
             'soal_preview' => mb_substr($clean_soal, 0, 140) . (mb_strlen($clean_soal) > 140 ? '...' : ''),
             'kunci_sekarang' => strtoupper(trim($r['jawaban']))
         ];
+
+        // Simpan dengan key id_soal dan key nomor untuk lookup yang aman
+        $soal_list[(int)$r['id_soal']] = $item_info;
+        $soal_list['no_' . (int)$r['nomor']] = $item_info;
 
         $prompt_item = [
             'nomor' => (int)$r['nomor'],
@@ -154,7 +230,11 @@ PERINGATAN SISTEM CBT:
 Dalam ujian CBT ini, SELURUH NOMOR SOAL AKAN DIACAK (SHUFFLE) SECARA OTOMATIS saat dikerjakan oleh siswa. Setiap butir soal WAJIB BERDIRI SENDIRI (MANDIRI) dan TIDAK BOLEH mengasumsikan urutan nomor soal tetap berurutan!
 
 KRITERIA STATUS HASIL ANALISIS (Pilih salah satu status yang paling tepat):
-1. 'CACAT_ACAK' (Prioritas Deteksi Anomali Pengacakan CBT):
+1. 'DUPLIKAT' (Prioritas Deteksi Soal Ganda / Salah Input Dua Kali):
+   - Butir soal ini memiliki teks pertanyaan atau isi stimulus yang sama persis / duplikat dengan butir soal lain dalam ujian ini (terindikasi salah input dua kali).
+   - Jelaskan di 'alasan': 'Soal ini terindikasi ganda/duplikat dengan butir soal lain...'.
+
+2. 'CACAT_ACAK' (Prioritas Deteksi Anomali Pengacakan CBT):
    - Soal merujuk pada nomor urut soal tertentu atau mengasumsikan urutan nomor soal tetap berurutan.
    - Contoh kasus CACAT_ACAK:
      * Teks memuat kalimat 'Bacalah teks berikut untuk menjawab soal nomor 1-5' atau 'Soal nomor 3 s.d. 5'.
@@ -163,16 +243,16 @@ KRITERIA STATUS HASIL ANALISIS (Pilih salah satu status yang paling tepat):
    - Dampak: Karena sistem CBT mengacak nomor butir soal, siswa akan kehilangan stimulus atau salah paham membaca nomor rujukan.
    - Jelaskan di 'alasan' mengapa cacat acak dan berikan saran perbaikan (contoh: 'Sertakan teks stimulus langsung di butir soal ini dan hilangkan kalimat rujukan nomor 1-5').
 
-2. 'TIDAK_LOGIS' (Anomali Kelogisan / Pilihan Ganda Tertukar / Format Rusak):
+3. 'TIDAK_LOGIS' (Anomali Kelogisan / Pilihan Ganda Tertukar / Format Rusak):
    - Soal tidak masuk akal, kalimat rancu/rusak, atau susunan soal acak-acakan.
    - OPSI JAWABAN TERTUKAR DENGAN NOMOR LAIN: Pertanyaan dan pilihan ganda sama sekali tidak nyambung (contoh: pertanyaan menanyakan sinonim kata Bahasa Indonesia, tetapi opsi jawabannya adalah rumus atau opsi dari nomor soal lain yang keliru di-copy-paste).
    - Ambigu: Tidak ada satupun opsi yang benar, ATAU terdapat lebih dari satu opsi jawaban yang sama-sama benar.
 
-3. 'KUNCI_SALAH' (Kunci Jawaban CBT Keliru):
+4. 'KUNCI_SALAH' (Kunci Jawaban CBT Keliru):
    - Soal logis, mandiri (ramah pengacakan CBT), dan opsi jawaban nyambung, TETAPI kunci jawaban yang tercatat saat ini di CBT salah.
    - AI menemukan opsi jawaban yang terbukti benar menurut kaidah keilmuan. Wajib cantumkan huruf opsi yang benar pada 'kunci_ai'.
 
-4. 'SESUAI' (Soal Valid, Mandiri & Kunci Benar):
+5. 'SESUAI' (Soal Valid, Mandiri & Kunci Benar):
    - Soal logis, mandiri (tidak merujuk nomor lain), opsi jawaban sinkron, dan kunci jawaban yang tercatat di CBT sudah tepat.
 
 OUTPUT WAJIB FORMAT JSON OBJECT BERIKUT (tanpa teks penjelasan pembuka/penutup):
@@ -189,8 +269,8 @@ OUTPUT WAJIB FORMAT JSON OBJECT BERIKUT (tanpa teks penjelasan pembuka/penutup):
   ]
 }
 Catatan:
-- Nilai 'status' HANYA boleh salah satu dari: 'SESUAI', 'KUNCI_SALAH', 'TIDAK_LOGIS', 'CACAT_ACAK'.
-- Jika berstatus 'CACAT_ACAK' atau 'TIDAK_LOGIS', tetap rekomendasikan 'kunci_ai' jika ada opsi yang paling tepat, atau kosongkan (\"\") jika tidak ada.";
+- Nilai 'status' HANYA boleh salah satu dari: 'SESUAI', 'KUNCI_SALAH', 'TIDAK_LOGIS', 'CACAT_ACAK', 'DUPLIKAT'.
+- Jika berstatus 'CACAT_ACAK', 'TIDAK_LOGIS', atau 'DUPLIKAT', tetap rekomendasikan 'kunci_ai' jika ada opsi yang paling tepat, atau kosongkan (\"\") jika tidak ada.";
 
     $userPrompt = "Berikut data butir soal yang harus dianalisis:\n" . json_encode($soal_for_prompt, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
 
@@ -253,12 +333,29 @@ Catatan:
     $finalHasil = [];
     foreach ($parsedAi as $item) {
         $num = intval($item['nomor'] ?? 0);
-        $local = $soal_list[$num] ?? null;
+        $idSoal = intval($item['id_soal'] ?? 0);
 
+        // Cari data lokal berdasarkan id_soal terlebih dahulu, jika tidak ada baru gunakan nomor
+        $local = null;
+        if ($idSoal > 0 && isset($soal_list[$idSoal])) {
+            $local = $soal_list[$idSoal];
+        } elseif (isset($soal_list['no_' . $num])) {
+            $local = $soal_list['no_' . $num];
+        }
+
+        $realId = $local ? $local['id_soal'] : $idSoal;
         $rawStatus = strtoupper(trim($item['status'] ?? 'SESUAI'));
         $st = 'SESUAI';
+        $alasan = $item['alasan'] ?? ($item['penjelasan'] ?? '');
 
-        if (strpos($rawStatus, 'ACAK') !== false) {
+        // 1. Cek deteksi ganda / duplikat sistem (Prioritas Tertinggi)
+        if ($realId > 0 && isset($duplicate_map[$realId])) {
+            $dupInfo = $duplicate_map[$realId];
+            $st = 'DUPLIKAT';
+            $alasan = "Terdeteksi SOAL GANDA / DUPLIKAT (" . $dupInfo['percent'] . "% identik) dengan Butir Soal No. " . $dupInfo['dup_nomor'] . " (ID Soal: " . $dupInfo['dup_id'] . "). Terindikasi salah input dua kali. Harap periksa dan hapus salah satunya.";
+        } elseif (strpos($rawStatus, 'DUPLIKAT') !== false || strpos($rawStatus, 'GANDA') !== false) {
+            $st = 'DUPLIKAT';
+        } elseif (strpos($rawStatus, 'ACAK') !== false) {
             $st = 'CACAT_ACAK';
         } elseif (strpos($rawStatus, 'LOGIS') !== false || strpos($rawStatus, 'AMBIGU') !== false || strpos($rawStatus, 'TUKAR') !== false || strpos($rawStatus, 'RANCU') !== false) {
             $st = 'TIDAK_LOGIS';
@@ -277,13 +374,13 @@ Catatan:
         }
 
         $finalHasil[] = [
-            'nomor' => $num,
-            'id_soal' => $local ? $local['id_soal'] : intval($item['id_soal'] ?? 0),
+            'nomor' => $local ? $local['nomor'] : $num,
+            'id_soal' => $realId,
             'soal_preview' => $local ? $local['soal_preview'] : '',
             'kunci_sekarang' => $kunciSekarang,
             'kunci_ai' => $kunciAi,
             'status' => $st,
-            'alasan' => $item['alasan'] ?? ($item['penjelasan'] ?? '')
+            'alasan' => $alasan
         ];
     }
 
@@ -337,6 +434,33 @@ if ($action == 'update_kunci') {
         echo json_encode([
             'status' => 'error',
             'message' => 'Gagal memperbarui kunci di database: ' . mysqli_error($koneksi)
+        ]);
+    }
+    exit;
+}
+
+// ============================================================
+// 4. HAPUS BUTIR SOAL GANDA / DUPLIKAT (1-CLICK DELETE DARI MODAL)
+// ============================================================
+if ($action == 'hapus_soal') {
+    $id_soal = intval($_POST['id_soal'] ?? 0);
+
+    if ($id_soal <= 0) {
+        echo json_encode(['status' => 'error', 'message' => 'ID Soal tidak valid.']);
+        exit;
+    }
+
+    $exec = mysqli_query($koneksi, "DELETE FROM soal WHERE id_soal = '$id_soal'");
+    if ($exec) {
+        echo json_encode([
+            'status' => 'success',
+            'message' => 'Butir soal ganda berhasil dihapus dari bank soal.',
+            'id_soal' => $id_soal
+        ]);
+    } else {
+        echo json_encode([
+            'status' => 'error',
+            'message' => 'Gagal menghapus butir soal: ' . mysqli_error($koneksi)
         ]);
     }
     exit;

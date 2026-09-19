@@ -1376,6 +1376,7 @@ if ($ac == '') :
             var salah = 0;
             var tidak_logis = 0;
             var cacat_acak = 0;
+            var duplikat = 0;
 
             var tbody = $('#tbody-hasil-ai');
             tbody.empty();
@@ -1385,6 +1386,7 @@ if ($ac == '') :
                 if (st === 'SESUAI') sesuai++;
                 else if (st === 'KUNCI_SALAH') salah++;
                 else if (st === 'CACAT_ACAK') cacat_acak++;
+                else if (st === 'DUPLIKAT') duplikat++;
                 else if (st === 'TIDAK_LOGIS' || st === 'AMBIGU') {
                     tidak_logis++;
                     st = 'TIDAK_LOGIS';
@@ -1404,6 +1406,10 @@ if ($ac == '') :
                     badgeClass = 'label-default';
                     badgeStyle = 'background-color: #605ca8; color: #fff;';
                     badgeText = '<i class="fa fa-random"></i> CACAT ACAK';
+                } else if (st === 'DUPLIKAT') {
+                    badgeClass = 'label-default';
+                    badgeStyle = 'background-color: #39cccc; color: #fff; font-weight: 600;';
+                    badgeText = '<i class="fa fa-clone"></i> SOAL GANDA';
                 } else if (st === 'TIDAK_LOGIS') {
                     badgeClass = 'label-warning';
                     badgeStyle = 'background-color: #f39c12; color: #fff;';
@@ -1414,6 +1420,9 @@ if ($ac == '') :
                 if (st === 'KUNCI_SALAH' && item.kunci_ai) {
                     btnAksi = '<button type="button" class="btn btn-xs btn-danger btn-flat btn-apply-key" data-id="' + item.id_soal + '" data-nomor="' + item.nomor + '" data-kunci="' + item.kunci_ai + '" title="Terapkan Kunci Rekomendasi AI">' +
                               '<i class="fa fa-check"></i> Ubah ke ' + item.kunci_ai + '</button>';
+                } else if (st === 'DUPLIKAT') {
+                    btnAksi = '<button type="button" class="btn btn-xs btn-danger btn-flat btn-delete-dup" data-id="' + item.id_soal + '" data-nomor="' + item.nomor + '" title="Hapus butir soal ganda ini">' +
+                              '<i class="fa fa-trash"></i> Hapus Ganda</button>';
                 } else if (st === 'CACAT_ACAK' || st === 'TIDAK_LOGIS') {
                     var mapelLink = currentAiMapelId ? '?pg=banksoal&ac=lihat&id=' + currentAiMapelId : '#';
                     btnAksi = '<a href="' + mapelLink + '" target="_blank" class="btn btn-xs btn-default btn-flat" style="border-color: #ccc;" title="Buka dan Perbaiki Soal Ini">' +
@@ -1437,12 +1446,14 @@ if ($ac == '') :
             $('#kpi-salah').text(salah);
             $('#kpi-logis').text(tidak_logis);
             $('#kpi-acak').text(cacat_acak);
+            $('#kpi-duplikat').text(duplikat);
 
             $('#count-filter-all').text(total);
             $('#count-filter-sesuai').text(sesuai);
             $('#count-filter-salah').text(salah);
             $('#count-filter-logis').text(tidak_logis);
             $('#count-filter-acak').text(cacat_acak);
+            $('#count-filter-duplikat').text(duplikat);
 
             if (salah > 0) {
                 $('#btn-terapkan-semua-ai').show();
@@ -1476,6 +1487,53 @@ if ($ac == '') :
             $('.row-hasil-ai').hide();
             $('.row-hasil-ai[data-status="' + filter + '"]').show();
         }
+    });
+
+    // Hapus butir soal ganda langsung dari modal hasil analisis
+    $(document).on('click', '.btn-delete-dup', function() {
+        var btn = $(this);
+        var idSoal = btn.data('id');
+        var nomor = btn.data('nomor');
+
+        if (!confirm('Apakah Anda yakin ingin menghapus butir soal ganda ini (No. ' + nomor + ', ID Soal: ' + idSoal + ')?')) {
+            return;
+        }
+
+        btn.html('<i class="fa fa-spinner fa-spin"></i>').prop('disabled', true);
+
+        $.ajax({
+            type: 'POST',
+            url: 'mod_banksoal/ajax_analisis_ai.php?action=hapus_soal',
+            data: { id_soal: idSoal },
+            dataType: 'json',
+            success: function(res) {
+                if (res.status === 'success') {
+                    toastr.success('Butir soal ganda No. ' + nomor + ' berhasil dihapus dari database.');
+                    $('#row-soal-' + idSoal).fadeOut(400, function() {
+                        $(this).remove();
+                    });
+
+                    // Kurangi KPI counter
+                    var curDup = parseInt($('#kpi-duplikat').text()) || 0;
+                    var curTot = parseInt($('#kpi-total').text()) || 0;
+                    if (curDup > 0) {
+                        $('#kpi-duplikat').text(curDup - 1);
+                        $('#count-filter-duplikat').text(curDup - 1);
+                    }
+                    if (curTot > 0) {
+                        $('#kpi-total').text(curTot - 1);
+                        $('#count-filter-all').text(curTot - 1);
+                    }
+                } else {
+                    btn.html('<i class="fa fa-trash"></i> Hapus Ganda').prop('disabled', false);
+                    toastr.error(res.message || 'Gagal menghapus soal.');
+                }
+            },
+            error: function(xhr) {
+                btn.html('<i class="fa fa-trash"></i> Hapus Ganda').prop('disabled', false);
+                toastr.error('Error komunikasi: ' + xhr.statusText);
+            }
+        });
     });
 
     // Terapkan Kunci Rekomendasi AI per soal
@@ -1608,7 +1666,7 @@ if ($ac == '') :
                 <div id="ai-pre-analysis" style="display: none;">
                     <div class="callout callout-info" style="border-left-color: #605ca8; background: #fff; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); color: #333;">
                         <h4 style="color: #605ca8; font-weight: 600;"><i class="fa fa-info-circle"></i> Siap Melakukan Validasi Kualitas Soal</h4>
-                        <p style="margin-bottom: 5px;">AI akan mengaudit setiap butir soal: kesesuaian kunci jawaban, kelogisan teks & opsi (mendeteksi opsi tertukar/rancu), serta <b>anomali pengacakan CBT</b> (soal yang merujuk nomor butir lain seperti <i>"soal ini digunakan untuk nomor 1-5"</i> yang berpotensi memicu miss pemahaman siswa saat soal diacak).</p>
+                        <p style="margin-bottom: 5px;">AI akan mengaudit setiap butir soal: kesesuaian kunci jawaban, kelogisan teks & opsi, <b>anomali pengacakan CBT</b> (merujuk nomor lain yang berpotensi membingungkan siswa), serta <b>deteksi soal ganda / duplikat</b> (mencegah salah input/import dua kali).</p>
                         <p style="margin-bottom: 0;"><b>Total Soal Pilihan Ganda:</b> <span class="badge bg-purple" id="ai-total-soal-ready" style="font-size: 14px;">0</span> butir soal.</p>
                     </div>
                     <div class="text-center" style="margin: 25px 0 15px 0;">
@@ -1634,48 +1692,57 @@ if ($ac == '') :
 
                 <div id="ai-result-container" style="display: none;">
                     <div class="row" style="margin-bottom: 15px;">
-                        <div class="col-md-2 col-xs-6" style="padding-right: 5px; padding-left: 10px;">
+                        <div class="col-md-2 col-sm-4 col-xs-6" style="padding-right: 4px; padding-left: 8px;">
                             <div class="info-box bg-aqua" style="border-radius: 5px; min-height: 68px;">
-                                <span class="info-box-icon" style="height: 68px; line-height: 68px; background: rgba(0,0,0,0.1); font-size: 26px;"><i class="fa fa-list-ol"></i></span>
-                                <div class="info-box-content" style="padding-left: 5px;">
-                                    <span class="info-box-text" style="font-size: 11px;">Total Soal</span>
-                                    <span class="info-box-number" id="kpi-total" style="font-size: 20px;">0</span>
+                                <span class="info-box-icon" style="height: 68px; line-height: 68px; background: rgba(0,0,0,0.1); font-size: 24px;"><i class="fa fa-list-ol"></i></span>
+                                <div class="info-box-content" style="padding-left: 4px;">
+                                    <span class="info-box-text" style="font-size: 10px;">Total Soal</span>
+                                    <span class="info-box-number" id="kpi-total" style="font-size: 19px;">0</span>
                                 </div>
                             </div>
                         </div>
-                        <div class="col-md-2 col-xs-6" style="padding-right: 5px; padding-left: 5px;">
+                        <div class="col-md-2 col-sm-4 col-xs-6" style="padding-right: 4px; padding-left: 4px;">
                             <div class="info-box bg-green" style="border-radius: 5px; min-height: 68px;">
-                                <span class="info-box-icon" style="height: 68px; line-height: 68px; background: rgba(0,0,0,0.1); font-size: 26px;"><i class="fa fa-check-circle"></i></span>
-                                <div class="info-box-content" style="padding-left: 5px;">
-                                    <span class="info-box-text" style="font-size: 11px;">Kunci Sesuai</span>
-                                    <span class="info-box-number" id="kpi-sesuai" style="font-size: 20px;">0</span>
+                                <span class="info-box-icon" style="height: 68px; line-height: 68px; background: rgba(0,0,0,0.1); font-size: 24px;"><i class="fa fa-check-circle"></i></span>
+                                <div class="info-box-content" style="padding-left: 4px;">
+                                    <span class="info-box-text" style="font-size: 10px;">Kunci Sesuai</span>
+                                    <span class="info-box-number" id="kpi-sesuai" style="font-size: 19px;">0</span>
                                 </div>
                             </div>
                         </div>
-                        <div class="col-md-3 col-xs-6" style="padding-right: 5px; padding-left: 5px;">
+                        <div class="col-md-2 col-sm-4 col-xs-6" style="padding-right: 4px; padding-left: 4px;">
                             <div class="info-box bg-red" style="border-radius: 5px; min-height: 68px;">
-                                <span class="info-box-icon" style="height: 68px; line-height: 68px; background: rgba(0,0,0,0.1); font-size: 26px;"><i class="fa fa-times-circle"></i></span>
-                                <div class="info-box-content" style="padding-left: 5px;">
-                                    <span class="info-box-text" style="font-size: 11px;">Kunci Salah</span>
-                                    <span class="info-box-number" id="kpi-salah" style="font-size: 20px;">0</span>
+                                <span class="info-box-icon" style="height: 68px; line-height: 68px; background: rgba(0,0,0,0.1); font-size: 24px;"><i class="fa fa-times-circle"></i></span>
+                                <div class="info-box-content" style="padding-left: 4px;">
+                                    <span class="info-box-text" style="font-size: 10px;">Kunci Salah</span>
+                                    <span class="info-box-number" id="kpi-salah" style="font-size: 19px;">0</span>
                                 </div>
                             </div>
                         </div>
-                        <div class="col-md-3 col-xs-6" style="padding-right: 5px; padding-left: 5px;">
+                        <div class="col-md-2 col-sm-4 col-xs-6" style="padding-right: 4px; padding-left: 4px;">
                             <div class="info-box bg-yellow" style="border-radius: 5px; min-height: 68px;">
-                                <span class="info-box-icon" style="height: 68px; line-height: 68px; background: rgba(0,0,0,0.1); font-size: 26px;"><i class="fa fa-exclamation-triangle"></i></span>
-                                <div class="info-box-content" style="padding-left: 5px;">
-                                    <span class="info-box-text" style="font-size: 11px;">Tidak Logis / Tertukar</span>
-                                    <span class="info-box-number" id="kpi-logis" style="font-size: 20px;">0</span>
+                                <span class="info-box-icon" style="height: 68px; line-height: 68px; background: rgba(0,0,0,0.1); font-size: 24px;"><i class="fa fa-exclamation-triangle"></i></span>
+                                <div class="info-box-content" style="padding-left: 4px;">
+                                    <span class="info-box-text" style="font-size: 10px;">Tidak Logis</span>
+                                    <span class="info-box-number" id="kpi-logis" style="font-size: 19px;">0</span>
                                 </div>
                             </div>
                         </div>
-                        <div class="col-md-2 col-xs-12" style="padding-right: 10px; padding-left: 5px;">
+                        <div class="col-md-2 col-sm-4 col-xs-6" style="padding-right: 4px; padding-left: 4px;">
                             <div class="info-box bg-purple" style="border-radius: 5px; min-height: 68px;">
-                                <span class="info-box-icon" style="height: 68px; line-height: 68px; background: rgba(0,0,0,0.1); font-size: 26px;"><i class="fa fa-random"></i></span>
-                                <div class="info-box-content" style="padding-left: 5px;">
-                                    <span class="info-box-text" style="font-size: 11px;">Cacat Acak</span>
-                                    <span class="info-box-number" id="kpi-acak" style="font-size: 20px;">0</span>
+                                <span class="info-box-icon" style="height: 68px; line-height: 68px; background: rgba(0,0,0,0.1); font-size: 24px;"><i class="fa fa-random"></i></span>
+                                <div class="info-box-content" style="padding-left: 4px;">
+                                    <span class="info-box-text" style="font-size: 10px;">Cacat Acak</span>
+                                    <span class="info-box-number" id="kpi-acak" style="font-size: 19px;">0</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-2 col-sm-4 col-xs-6" style="padding-right: 8px; padding-left: 4px;">
+                            <div class="info-box bg-teal" style="border-radius: 5px; min-height: 68px;">
+                                <span class="info-box-icon" style="height: 68px; line-height: 68px; background: rgba(0,0,0,0.1); font-size: 24px;"><i class="fa fa-clone"></i></span>
+                                <div class="info-box-content" style="padding-left: 4px;">
+                                    <span class="info-box-text" style="font-size: 10px;">Soal Ganda</span>
+                                    <span class="info-box-number" id="kpi-duplikat" style="font-size: 19px;">0</span>
                                 </div>
                             </div>
                         </div>
@@ -1685,8 +1752,9 @@ if ($ac == '') :
                         <div class="btn-group" id="ai-filter-group">
                             <button type="button" class="btn btn-default btn-sm active" data-filter="all">Semua (<span id="count-filter-all">0</span>)</button>
                             <button type="button" class="btn btn-default btn-sm text-red" data-filter="KUNCI_SALAH"><i class="fa fa-times-circle"></i> Kunci Salah (<span id="count-filter-salah">0</span>)</button>
-                            <button type="button" class="btn btn-default btn-sm text-yellow" data-filter="TIDAK_LOGIS"><i class="fa fa-exclamation-triangle"></i> Tidak Logis / Tertukar (<span id="count-filter-logis">0</span>)</button>
+                            <button type="button" class="btn btn-default btn-sm text-yellow" data-filter="TIDAK_LOGIS"><i class="fa fa-exclamation-triangle"></i> Tidak Logis (<span id="count-filter-logis">0</span>)</button>
                             <button type="button" class="btn btn-default btn-sm text-purple" data-filter="CACAT_ACAK"><i class="fa fa-random"></i> Cacat Acak (<span id="count-filter-acak">0</span>)</button>
+                            <button type="button" class="btn btn-default btn-sm text-teal" data-filter="DUPLIKAT"><i class="fa fa-clone"></i> Soal Ganda (<span id="count-filter-duplikat">0</span>)</button>
                             <button type="button" class="btn btn-default btn-sm text-green" data-filter="SESUAI"><i class="fa fa-check-circle"></i> Sesuai (<span id="count-filter-sesuai">0</span>)</button>
                         </div>
                         <div>
