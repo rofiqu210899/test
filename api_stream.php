@@ -46,6 +46,13 @@ if ($action == 'heartbeat') {
 }
 
 if ($action == 'check_signal') {
+    // Cek apakah kamera dimatikan oleh admin
+    $qsetting = mysqli_fetch_array(mysqli_query($koneksi, "SELECT kamera FROM setting WHERE id_setting='1'"));
+    if (isset($qsetting['kamera']) && $qsetting['kamera'] == 0) {
+        echo json_encode(['status' => 'disabled', 'is_watching' => false, 'kamera_off' => true]);
+        exit;
+    }
+
     if (!$id_siswa) {
         echo json_encode(['status' => 'idle', 'is_watching' => false]);
         exit;

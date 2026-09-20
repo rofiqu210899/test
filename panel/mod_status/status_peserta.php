@@ -209,6 +209,29 @@
                                                 } elseif ($nilai['ujian_mulai'] <> '' and $nilai['ujian_selesai'] == '') {
                                                     $selisih = strtotime($nilai['ujian_berlangsung']) - strtotime($nilai['ujian_mulai']);
 
+                                                    // Hitung total soal ujian
+                                                    $total_soal = intval($mapel['tampil_pg']) + intval($mapel['tampil_esai']);
+                                                    if ($total_soal == 0) {
+                                                        $total_soal = intval($mapel['jml_soal']);
+                                                    }
+
+                                                    // Hitung jumlah soal terjawab di jawaban_temp
+                                                    $q_terjawab = mysqli_query($koneksi, "SELECT COUNT(*) as jml FROM jawaban_temp WHERE id_siswa='$nilai[id_siswa]' AND id_ujian='$nilai[id_ujian]' AND ((jawaban IS NOT NULL AND jawaban <> '' AND jawaban <> 'X') OR (esai IS NOT NULL AND esai <> ''))");
+                                                    $d_terjawab = mysqli_fetch_assoc($q_terjawab);
+                                                    $jml_terjawab = intval($d_terjawab['jml']);
+                                                    $no_aktif = !empty($nilai['no_soal_aktif']) ? intval($nilai['no_soal_aktif']) : 1;
+                                                    $persen = ($total_soal > 0) ? min(100, round(($jml_terjawab / $total_soal) * 100)) : 0;
+
+                                                    $jawaban = "<div style='min-width:130px;'>
+                                                        <div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:3px;'>
+                                                            <span class='label label-primary' style='font-size:11px;' title='Soal Terjawab'><b>$jml_terjawab</b>/$total_soal Soal</span>
+                                                            <span class='label label-default' style='font-size:10px;border:1px solid #ccc;color:#333;' title='Sedang membuka nomor ini'><i class='fa fa-pencil'></i> No. <b>$no_aktif</b></span>
+                                                        </div>
+                                                        <div class='progress' style='height:6px;margin-bottom:0;background:#e2e8f0;border-radius:3px;overflow:hidden;' title='Progres: $persen%'>
+                                                            <div class='progress-bar progress-bar-success progress-bar-striped active' style='width: {$persen}%;'></div>
+                                                        </div>
+                                                    </div>";
+
                                                     $ket = "<label class='label label-danger'><i class='fa fa-spin fa-spinner' title='Sedang ujian'></i>&nbsp;Dikerjakan</label>";
 
                                                     $btn = "<button data-id='$nilai[id_nilai]' class='hapus btn btn-xs btn-danger'>selesai</button>";

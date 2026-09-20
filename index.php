@@ -1556,7 +1556,12 @@ $tglsekarang = time();
                                     id_siswa: <?= $id_siswa ?>,
                                     foto: dataUrl
                                 },
-                                dataType: 'json'
+                                dataType: 'json',
+                                success: function(res) {
+                                    if (res && res.status === 'disabled') {
+                                        shutdownCamera();
+                                    }
+                                }
                             });
                         }
                     } catch (e) {
@@ -1636,11 +1641,49 @@ $tglsekarang = time();
                     });
                 }
 
+                var timerSnapshot = null;
+                var timerSignal = null;
+
+                function shutdownCamera() {
+                    if (liveCctvTimer) { clearInterval(liveCctvTimer); liveCctvTimer = null; }
+                    if (timerSnapshot) { clearInterval(timerSnapshot); timerSnapshot = null; }
+                    if (timerSignal) { clearInterval(timerSignal); timerSignal = null; }
+                    if (peerConn) {
+                        try { peerConn.close(); } catch(e) {}
+                        peerConn = null;
+                    }
+                    if (proctorStream) {
+                        try {
+                            proctorStream.getTracks().forEach(function(track) {
+                                track.stop();
+                            });
+                        } catch(e) {}
+                        proctorStream = null;
+                    }
+                    streamActive = false;
+                    isLiveStreaming = false;
+                    if (proctorVideo) {
+                        try {
+                            proctorVideo.pause();
+                            proctorVideo.srcObject = null;
+                            proctorVideo.remove();
+                        } catch(e) {}
+                    }
+                    if (proctorCanvas) {
+                        try { proctorCanvas.remove(); } catch(e) {}
+                    }
+                    console.log("[CBT Camera] Fitur kamera dinonaktifkan oleh admin. Semua sensor kamera dan request background telah dihentikan secara otomatis.");
+                }
+
                 function pollLiveSignal() {
                     $.ajax({
                         url: homeurl + '/api_stream.php?action=check_signal&id_siswa=<?= $id_siswa ?>',
                         dataType: 'json',
                         success: function(res) {
+                            if (res && (res.status === 'disabled' || res.kamera_off)) {
+                                shutdownCamera();
+                                return;
+                            }
                             if (res && res.is_watching) {
                                 if (!isLiveStreaming) {
                                     isLiveStreaming = true;
@@ -1669,11 +1712,11 @@ $tglsekarang = time();
                 $(document).ready(function() {
                     startCamera();
                     // Ambil snapshot otomatis secara berkala setiap 60 detik
-                    setInterval(function() {
+                    timerSnapshot = setInterval(function() {
                         captureAndUpload(false);
                     }, 60000);
                     // Polling permintaan pemantauan live CCTV setiap 2.5 detik
-                    setInterval(pollLiveSignal, 2500);
+                    timerSignal = setInterval(pollLiveSignal, 2500);
                 });
             })();
             <?php endif; ?>

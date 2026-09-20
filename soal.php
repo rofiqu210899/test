@@ -30,8 +30,8 @@ $image = array('jpg', 'jpeg', 'png', 'gif', 'bmp', 'JPG', 'JPEG', 'PNG', 'GIF', 
         'id_mapel' => $id_mapel,
         'id_ujian' => $ac
     );
-    //$mapel[0] = fetch($koneksi, 'ujian', array('id_mapel' => $id_mapel, 'id_ujian' => $ac));
-    update($koneksi, 'nilai', array('ujian_berlangsung' => $datetime), $where2);
+    $nomor_aktif = intval($no_soal) + 1;
+    update($koneksi, 'nilai', array('ujian_berlangsung' => $datetime, 'no_soal_aktif' => $nomor_aktif), $where2);
     $nilai = fetch($koneksi, 'nilai', $where2);
     $habis = strtotime($nilai['ujian_berlangsung']) - strtotime($nilai['ujian_mulai']);
     $lamaujian = $mapel[0]['lama_ujian'] * 60;
