@@ -1,43 +1,80 @@
 <?php
 require("config/config.default.php");
 require("config/config.function.php");
-//cek_session_admin();
-//Make sure that it is a POST request.
-$token = isset($_GET['token']) ? $_GET['token'] : 'false';
+
+$token = isset($_GET['token']) ? trim($_GET['token']) : '';
 $querys = mysqli_query($koneksi, "select token_api from setting where token_api='$token'");
 $cektoken = mysqli_num_rows($querys);
 
 if ($cektoken <> 0) {
     if (strcasecmp($_SERVER['REQUEST_METHOD'], 'POST') != 0) {
-        throw new Exception('Request method must be POST!');
+        http_response_code(405);
+        echo "Method Not Allowed";
+        exit;
     }
 
-    //Make sure that the content type of the POST request has been set to application/json
-    $contentType = isset($_SERVER["CONTENT_TYPE"]) ? trim($_SERVER["CONTENT_TYPE"]) : '';
-    if (strcasecmp($contentType, 'application/json') != 0) {
-        throw new Exception('Content type must be: application/json');
-    }
-
-    //Receive the RAW post data.
     $content = trim(file_get_contents("php://input"));
-
-    //Attempt to decode the incoming RAW post data from JSON.
     $decoded = json_decode($content, true);
 
-    //If json_decode failed, the JSON is invalid.
     if (!is_array($decoded)) {
-        throw new Exception('Received content contained invalid JSON!');
+        http_response_code(400);
+        echo "Invalid JSON";
+        exit;
     }
 
+    $sukses = 0;
     foreach ($decoded as $nilai) {
-        $cek = mysqli_num_rows(mysqli_query($koneksi, "select * from nilai where id_siswa='$nilai[id_siswa]' and id_ujian='$nilai[id_ujian]' and id_mapel='$nilai[id_mapel]' "));
-        if ($cek == 0) {
-            mysqli_query($koneksi, "insert into nilai (id_ujian,id_mapel,id_siswa,kode_ujian,ujian_mulai,ujian_berlangsung,ujian_selesai,jml_benar,jml_salah,skor,total,ipaddress,hasil,jawaban,jawaban_esai)
-        values ('$nilai[id_ujian]','$nilai[id_mapel]','$nilai[id_siswa]','$nilai[kode_ujian]','$nilai[ujian_mulai]','$nilai[ujian_berlangsung]','$nilai[ujian_selesai]','$nilai[jml_benar]','$nilai[jml_salah]','$nilai[skor]','$nilai[total]','$nilai[ipaddress]','$nilai[hasil]','$nilai[jawaban]','$nilai[jawaban_esai]')");
+        $id_siswa = (int)($nilai['id_siswa'] ?? 0);
+        $id_ujian = (int)($nilai['id_ujian'] ?? 0);
+        $id_mapel = (int)($nilai['id_mapel'] ?? 0);
+
+        if (!$id_siswa || !$id_ujian || !$id_mapel) {
+            continue;
         }
+
+        $kode_ujian = mysqli_real_escape_string($koneksi, $nilai['kode_ujian'] ?? '');
+        $ujian_mulai = mysqli_real_escape_string($koneksi, $nilai['ujian_mulai'] ?? '');
+        $ujian_berlangsung = mysqli_real_escape_string($koneksi, $nilai['ujian_berlangsung'] ?? '');
+        $ujian_selesai = mysqli_real_escape_string($koneksi, $nilai['ujian_selesai'] ?? '');
+        $jml_benar = (int)($nilai['jml_benar'] ?? 0);
+        $jml_salah = (int)($nilai['jml_salah'] ?? 0);
+        $skor = (float)($nilai['skor'] ?? 0);
+        $total = (float)($nilai['total'] ?? 0);
+        $ipaddress = mysqli_real_escape_string($koneksi, $nilai['ipaddress'] ?? '');
+        $hasil = mysqli_real_escape_string($koneksi, $nilai['hasil'] ?? '');
+        $jawaban = mysqli_real_escape_string($koneksi, $nilai['jawaban'] ?? '');
+        $jawaban_esai = mysqli_real_escape_string($koneksi, $nilai['jawaban_esai'] ?? '');
+        $no_soal_aktif = (int)($nilai['no_soal_aktif'] ?? 0);
+
+        $cek = mysqli_num_rows(mysqli_query($koneksi, "select id_nilai from nilai where id_siswa='$id_siswa' and id_ujian='$id_ujian' and id_mapel='$id_mapel'"));
+        if ($cek == 0) {
+            mysqli_query($koneksi, "insert into nilai 
+                (id_ujian,id_mapel,id_siswa,kode_ujian,ujian_mulai,ujian_berlangsung,ujian_selesai,jml_benar,jml_salah,skor,total,ipaddress,hasil,jawaban,jawaban_esai,no_soal_aktif,status)
+            values 
+                ('$id_ujian','$id_mapel','$id_siswa','$kode_ujian','$ujian_mulai','$ujian_berlangsung','$ujian_selesai','$jml_benar','$jml_salah','$skor','$total','$ipaddress','$hasil','$jawaban','$jawaban_esai','$no_soal_aktif','1')");
+        } else {
+            mysqli_query($koneksi, "update nilai set 
+                kode_ujian='$kode_ujian',
+                ujian_mulai='$ujian_mulai',
+                ujian_berlangsung='$ujian_berlangsung',
+                ujian_selesai='$ujian_selesai',
+                jml_benar='$jml_benar',
+                jml_salah='$jml_salah',
+                skor='$skor',
+                total='$total',
+                ipaddress='$ipaddress',
+                hasil='$hasil',
+                jawaban='$jawaban',
+                jawaban_esai='$jawaban_esai',
+                no_soal_aktif='$no_soal_aktif',
+                status='1'
+            where id_siswa='$id_siswa' and id_ujian='$id_ujian' and id_mapel='$id_mapel'");
+        }
+        $sukses++;
     }
 
     echo "berhasil";
 } else {
-    echo "<script>location.href='.'</script>";
+    http_response_code(403);
+    echo "Token API tidak valid";
 }

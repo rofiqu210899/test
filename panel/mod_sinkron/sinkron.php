@@ -13,93 +13,113 @@ if ($koneksi) {
         foreach ($data as $data) {
             $gagal = $gagal2 = $gagal3 = $gagal4 = $gagal5 = 0;
             $masuk1 = $masuk2 = $masuk3 = $masuk4 = $masuk5 = 0;
+            $url_host = rtrim($setting['url_host'] ?? '', '/');
             if ($data == 'siswa') {
-                $datax = http_request($setting['url_host'] . "/syncsiswa.php?token=" . $token .  "&server=" . $setting['id_server']);
+                $url_siswa = $url_host . "/syncsiswa.php?token=" . urlencode($token) . "&server=" . urlencode($setting['id_server']);
+                $datax = http_request($url_siswa);
                 $r = json_decode($datax, TRUE);
-                if ($r <> null) {
-                    //if ($r['token'] == 'tokenx') {
-                    $sql = mysqli_query($koneksi, "truncate table siswa");
-                    $i = 1;
-                    foreach ($r['siswa'] as $r) {
-                        $sql = mysqli_query($koneksi, "insert into siswa
-                            (id_siswa,id_kelas,idpk,nis,no_peserta,nama,level,ruang,sesi,username,password,foto,server,agama) values 			
-                            ('$r[id_siswa]','$r[id_kelas]','$r[idpk]','$r[nis]','$r[no_peserta]','" . addslashes($r['nama']) . "','$r[level]','$r[ruang]','$r[sesi]','$r[username]','$r[password]','$r[foto]','$r[server]','$r[agama]')");
+                if ($r !== null && isset($r['siswa']) && is_array($r['siswa'])) {
+                    if (count($r['siswa']) === 0) {
+                        echo '<div class="alert alert-warning alert-dismissible">
+                            <button type="button" class="close" data-dismiss="alert" aria-hidden="true">×</button>
+                            <h4><i class="icon fa fa-warning"></i> Data Siswa Kosong di Pusat!</h4>
+                            Server pusat terhubung, tetapi data peserta didik tidak ditemukan untuk server "' . htmlspecialchars($setting['id_server']) . '". Data lokal tidak diubah.
+                        </div>';
+                    } else {
+                        mysqli_query($koneksi, "TRUNCATE TABLE siswa");
+                        $i = 1;
+                        foreach ($r['siswa'] as $sw) {
+                            $id_siswa = (int)($sw['id_siswa'] ?? 0);
+                            $id_kelas = mysqli_real_escape_string($koneksi, $sw['id_kelas'] ?? '');
+                            $idpk = mysqli_real_escape_string($koneksi, $sw['idpk'] ?? '');
+                            $nis = mysqli_real_escape_string($koneksi, $sw['nis'] ?? '');
+                            $no_peserta = mysqli_real_escape_string($koneksi, $sw['no_peserta'] ?? '');
+                            $nama = mysqli_real_escape_string($koneksi, $sw['nama'] ?? '');
+                            $level = mysqli_real_escape_string($koneksi, $sw['level'] ?? '');
+                            $ruang = mysqli_real_escape_string($koneksi, $sw['ruang'] ?? '');
+                            $sesi = mysqli_real_escape_string($koneksi, $sw['sesi'] ?? '');
+                            $username = mysqli_real_escape_string($koneksi, $sw['username'] ?? '');
+                            $password = mysqli_real_escape_string($koneksi, $sw['password'] ?? '');
+                            $foto = mysqli_real_escape_string($koneksi, $sw['foto'] ?? '');
+                            $server_sw = mysqli_real_escape_string($koneksi, $sw['server'] ?? '');
+                            $agama = mysqli_real_escape_string($koneksi, $sw['agama'] ?? '');
 
-                        $qkelas = mysqli_query($koneksi, "SELECT id_kelas FROM kelas WHERE id_kelas='$r[id_kelas]'");
-                        $cekkelas = mysqli_num_rows($qkelas);
-                        if (!$cekkelas <> 0) {
-                            $exec = mysqli_query($koneksi, "INSERT INTO kelas (id_kelas,level,nama)VALUES('$r[id_kelas]','$r[level]','$r[id_kelas]')");
-                        }
-                        if ($setting['jenjang'] == 'SMK') {
+                            $sql = mysqli_query($koneksi, "INSERT INTO siswa
+                                (id_siswa,id_kelas,idpk,nis,no_peserta,nama,level,ruang,sesi,username,password,foto,server,agama) VALUES 			
+                                ('$id_siswa','$id_kelas','$idpk','$nis','$no_peserta','$nama','$level','$ruang','$sesi','$username','$password','$foto','$server_sw','$agama')");
 
-                            $qpk = mysqli_query($koneksi, "SELECT id_pk FROM pk WHERE id_pk='$r[idpk]'");
-                            $cekpk = mysqli_num_rows($qpk);
-                            if (!$cekpk <> 0) {
-                                $exec = mysqli_query($koneksi, "INSERT INTO pk (id_pk,program_keahlian)VALUES('$r[idpk]','$r[idpk]')");
+                            if (!empty($id_kelas)) {
+                                $qkelas = mysqli_query($koneksi, "SELECT id_kelas FROM kelas WHERE id_kelas='$id_kelas'");
+                                if (mysqli_num_rows($qkelas) == 0) {
+                                    mysqli_query($koneksi, "INSERT INTO kelas (id_kelas,level,nama) VALUES ('$id_kelas','$level','$id_kelas')");
+                                }
+                            }
+                            if (($setting['jenjang'] ?? '') == 'SMK' && !empty($idpk)) {
+                                $qpk = mysqli_query($koneksi, "SELECT id_pk FROM pk WHERE id_pk='$idpk'");
+                                if (mysqli_num_rows($qpk) == 0) {
+                                    mysqli_query($koneksi, "INSERT INTO pk (id_pk,program_keahlian) VALUES ('$idpk','$idpk')");
+                                }
+                            }
+                            if (!empty($level)) {
+                                $qlevel = mysqli_query($koneksi, "SELECT kode_level FROM level WHERE kode_level='$level'");
+                                if (mysqli_num_rows($qlevel) == 0) {
+                                    mysqli_query($koneksi, "INSERT INTO level (kode_level,keterangan) VALUES ('$level','$level')");
+                                }
+                            }
+                            if (!empty($ruang)) {
+                                $qruang = mysqli_query($koneksi, "SELECT kode_ruang FROM ruang WHERE kode_ruang='$ruang'");
+                                if (mysqli_num_rows($qruang) == 0) {
+                                    mysqli_query($koneksi, "INSERT INTO ruang (kode_ruang,keterangan) VALUES ('$ruang','$ruang')");
+                                }
+                            }
+                            if (!empty($sesi)) {
+                                $qsesi = mysqli_query($koneksi, "SELECT kode_sesi FROM sesi WHERE kode_sesi='$sesi'");
+                                if (mysqli_num_rows($qsesi) == 0) {
+                                    mysqli_query($koneksi, "INSERT INTO sesi (kode_sesi,nama_sesi) VALUES ('$sesi','$sesi')");
+                                }
+                            }
+
+                            if (!$sql) {
+                                $gagal++;
+                            } else {
+                                $masuk1++;
                             }
                         }
-                        $qlevel = mysqli_query($koneksi, "SELECT kode_level FROM level WHERE kode_level='$r[level]'");
-                        $ceklevel = mysqli_num_rows($qlevel);
-                        if (!$ceklevel <> 0) {
-                            $exec = mysqli_query($koneksi, "INSERT INTO level (kode_level,keterangan)VALUES('$r[level]','$r[level]')");
-                        }
-                        $qruang = mysqli_query($koneksi, "SELECT kode_ruang FROM ruang WHERE kode_ruang='$r[ruang]'");
-                        $cekruang = mysqli_num_rows($qruang);
-                        if (!$cekruang <> 0) {
-                            $exec = mysqli_query($koneksi, "INSERT INTO ruang (kode_ruang,keterangan)VALUES('$r[ruang]','$r[ruang]')");
-                        }
-                        $qsesi = mysqli_query($koneksi, "SELECT kode_sesi FROM sesi WHERE kode_sesi='$r[sesi]'");
-                        $ceksesi = mysqli_num_rows($qsesi);
-                        if (!$ceksesi <> 0) {
-                            $exec = mysqli_query($koneksi, "INSERT INTO sesi (kode_sesi,nama_sesi)VALUES('$r[sesi]','$r[sesi]')");
-                        }
-                        // $qserver = mysqli_query($koneksi, "SELECT kode_server FROM server WHERE kode_server='$r[server]'");
-                        // $cekserver = mysqli_num_rows($qserver);
-                        // if (!$cekserver <> 0) {
-                        //     $exec = mysqli_query($koneksi, "INSERT INTO server (kode_server,nama_server,status)VALUES('$r[server]','$r[server]','aktif')");
-                        // }
-                        if (!$sql) {
-                            $gagal++;
-                        } else {
-                            $masuk1++;
-                        }
+
+                        $exec = mysqli_query($koneksi, "UPDATE sinkron SET jumlah='$masuk1', status_sinkron='1', tanggal='$datetime' WHERE nama_data='DATA1'");
+
+                        echo "
+                        <div class='row'>
+                            <div class='col-md-12'>
+                                <div class='box box-solid'>
+                                    <div class='box-header with-border bg-blue'>
+                                    <h5 class='box-title'>DATA YANG MASUK KE LOKAL</h5>
+                                    </div>
+                                    <div class='box-body'>
+                                    <table class='table table-striped'>
+                                            <th>Nama Data</th><th>Data Berhasil Masuk</th><th>Data Gagal</th>
+                                            <tr><td>Peserta Ujian</td><td><i class='fa fa-check text-green'></i> $masuk1</td><td><i class='fa fa-times text-red'></i> $gagal</td></tr>
+                                            
+                                        </table>
+                                    
+                                    </div><!-- /.box-body -->
+                                </div><!-- /.box -->
+                            </div>
+                        </div>";
                     }
-
-                    $exec = mysqli_query($koneksi, "update sinkron set jumlah='$masuk1', status_sinkron='1', tanggal='$datetime' where nama_data='DATA1'");
-                    //} else {
-                    //   echo "sinkron gagal";
-                    //}
-
-                    echo "
-                                    <div class='row'>
-                                        <div class='col-md-12'>
-                                            <div class='box box-solid'>
-                                                <div class='box-header with-border bg-blue'>
-                                                <h5 class='box-title'>DATA YANG MASUK KE LOKAL</h5>
-                                                </div>
-                                                <div class='box-body'>
-                                                <table class='table table-striped'>
-                                                        <th>Nama Data</th><th>Data Berhasil Masuk</th><th>Data Gagal</th>
-                                                        <tr><td>Peserta Ujian</td><td><i class='fa fa-check text-green'></i> $masuk1</td><td><i class='fa fa-times text-red'></i> $gagal</td></tr>
-                                                        
-                                                    </table>
-                                                
-                                                </div><!-- /.box-body -->
-                                            </div><!-- /.box -->
-                                        </div>
-                                    </div>";
                 } else {
+                    $err_msg = isset($r['message']) ? htmlspecialchars($r['message']) : 'Silahkan periksa URL server pusat, koneksi internet, dan token API.';
                     echo '<div class="alert alert-danger alert-dismissible">
-        <button type="button" class="close" data-dismiss="alert" aria-hidden="true">×</button>
-        <h4><i class="icon fa fa-ban"></i> Sinkron Data Siswa Gagal!</h4>
-        Silahkan periksa koneksi internet dan token
-      </div>';
+                        <button type="button" class="close" data-dismiss="alert" aria-hidden="true">×</button>
+                        <h4><i class="icon fa fa-ban"></i> Sinkron Data Siswa Gagal!</h4>
+                        ' . $err_msg . '
+                    </div>';
                 }
             }
             if ($data == 'soal') {
 
 
-                $syncdata = http_request($setting['url_host'] . "/syncsoal.php?token=" . $token);
+                $syncdata = http_request($url_host . "/syncsoal.php?token=" . urlencode($token));
 
                 $sync = json_decode($syncdata, TRUE);
 
@@ -187,7 +207,7 @@ if ($koneksi) {
                 }
             }
             if ($data == 'jadwal') {
-                $syncdata = http_request($setting['url_host'] . "/syncsoal.php?token=" . $token);
+                $syncdata = http_request($url_host . "/syncsoal.php?token=" . urlencode($token));
 
                 $sync = json_decode($syncdata, TRUE);
 

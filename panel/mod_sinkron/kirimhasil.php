@@ -3,9 +3,15 @@ require "../../config/config.default.php";
 require "../../config/config.function.php";
 cek_session_admin();
 if ($koneksi) {
-    $idujian = $_POST['id'];
-    $query = mysqli_query($koneksi, "select * from nilai where id_ujian='$idujian' and status is null");
+    $idujian = (int)($_POST['id'] ?? 0);
+    $query = mysqli_query($koneksi, "SELECT * FROM nilai WHERE id_ujian='$idujian' AND status IS NULL");
     $cek = mysqli_num_rows($query);
+    if ($cek == 0) {
+        // Jika semua sudah berstatus 1 tapi admin ingin sinkronkan ulang / kirim paksa
+        $query = mysqli_query($koneksi, "SELECT * FROM nilai WHERE id_ujian='$idujian' AND ujian_selesai IS NOT NULL");
+        $cek = mysqli_num_rows($query);
+    }
+
     if ($cek <> 0) {
         $array_nilai = array();
         while ($nilai = mysqli_fetch_assoc($query)) {
@@ -13,42 +19,46 @@ if ($koneksi) {
         }
         $payload = json_encode($array_nilai);
 
-        $url = $setting['url_host'] . '/syncnilai.php?token=' . $setting['token_api'];
+        $url_host = rtrim($setting['url_host'] ?? '', '/');
+        $url = $url_host . '/syncnilai.php?token=' . urlencode($setting['token_api'] ?? '');
 
-
-        //Initiate cURL.
         $ch = curl_init($url);
-
-        //attach encoded JSON string to the POST fields
         curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
-
-        //set the content type to application/json
         curl_setopt($ch, CURLOPT_HTTPHEADER, array('Content-Type:application/json'));
-
-        //return response instead of outputting
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 60);
 
-        //execute the POST request
         $result = curl_exec($ch);
-
-        //close cURL resource
+        $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curl_err = curl_error($ch);
         curl_close($ch);
 
-        echo '<div class="alert alert-success alert-dismissible">
-        <button type="button" class="close" data-dismiss="alert" aria-hidden="true">×</button>
-        <h4><i class="icon fa fa-ban"></i>Berhasil!</h4>
-        Data berhasil dikirimkan ...
-      </div>';
-        if ($result == 'berhasil') {
-            mysqli_query($koneksi, "UPDATE nilai SET status='1' where id_ujian='$idujian'");
+        if (trim($result) === 'berhasil' || ($http_code == 200 && strpos($result, 'berhasil') !== false)) {
+            mysqli_query($koneksi, "UPDATE nilai SET status='1' WHERE id_ujian='$idujian'");
+            echo '<div class="alert alert-success alert-dismissible">
+                <button type="button" class="close" data-dismiss="alert" aria-hidden="true">×</button>
+                <h4><i class="icon fa fa-check"></i> Berhasil!</h4>
+                Sebanyak ' . $cek . ' data hasil ujian berhasil dikirimkan ke server utama.
+            </div>';
+        } else {
+            $err = !empty($curl_err) ? $curl_err : htmlspecialchars($result);
+            echo '<div class="alert alert-danger alert-dismissible">
+                <button type="button" class="close" data-dismiss="alert" aria-hidden="true">×</button>
+                <h4><i class="icon fa fa-ban"></i> Gagal Mengirim Nilai!</h4>
+                Koneksi gagal atau server utama menolak pengiriman.<br>
+                <b>Detail:</b> ' . $err . ' (HTTP ' . $http_code . ')
+            </div>';
         }
     } else {
-        echo '<div class="alert alert-success alert-dismissible">
-        <button type="button" class="close" data-dismiss="alert" aria-hidden="true">×</button>
-        <h4><i class="icon fa fa-ban"></i> Ehmmm!</h4>
-        Tidak ada data yang dikirimkan
-      </div>';
+        echo '<div class="alert alert-warning alert-dismissible">
+            <button type="button" class="close" data-dismiss="alert" aria-hidden="true">×</button>
+            <h4><i class="icon fa fa-info-circle"></i> Tidak Ada Data</h4>
+            Tidak ada data nilai siswa yang selesai pada ujian ini untuk dikirimkan.
+        </div>';
     }
 } else {
-    echo "server tidak terhubung";
+    echo '<div class="alert alert-danger">Koneksi database lokal terputus.</div>';
 }

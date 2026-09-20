@@ -137,6 +137,34 @@ if ($simpan) {
 
     // Clean up temporary answers for this student & exam
     mysqli_query($koneksi, "DELETE FROM jawaban_temp WHERE id_ujian='$idu' AND id_mapel='$idm' AND id_siswa='$ids'");
+
+    // AUTO-SYNC NILAI KE SERVER UTAMA JIKA SERVER MODE LOKAL
+    if (($setting['server'] ?? '') === 'lokal' && !empty($setting['url_host'])) {
+        $row_nilai = fetch($koneksi, 'nilai', $where);
+        if ($row_nilai) {
+            $payload = json_encode([$row_nilai]);
+            $url_host = rtrim($setting['url_host'], '/');
+            $url = $url_host . '/syncnilai.php?token=' . urlencode($setting['token_api'] ?? '');
+
+            $ch = curl_init($url);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, array('Content-Type:application/json'));
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+            curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 3);
+            curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 2);
+
+            $res = curl_exec($ch);
+            $hcode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+
+            if (trim($res) === 'berhasil' || ($hcode == 200 && strpos($res, 'berhasil') !== false)) {
+                mysqli_query($koneksi, "UPDATE nilai SET status='1' WHERE id_ujian='$idu' AND id_mapel='$idm' AND id_siswa='$ids'");
+            }
+        }
+    }
 }
 
 mysqli_query($koneksi, "INSERT INTO log (id_siswa,type,text,date) VALUES ('$ids','login','Selesai Ujian','$tanggal $waktu')");
