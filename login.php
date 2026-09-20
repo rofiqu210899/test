@@ -16,31 +16,21 @@ $bc_src = !empty($setting['bc']) ? "$homeurl/{$setting['bc']}" : "$homeurl/dist/
 	<!-- Local Offline Assets -->
 	<link rel="stylesheet" href="<?= $homeurl ?>/dist/css/tailwind.min.css">
 	<link rel="stylesheet" href="<?= $homeurl ?>/plugins/sweetalert2/dist/sweetalert2.min.css">
-	<style>
-		.fade-to-right {
-			background: linear-gradient(to right, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.45) 60%, rgba(255, 255, 255, 1) 100%);
-		}
-		@media (max-width: 1023px) {
-			.fade-to-right {
-				background: linear-gradient(to bottom, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.5) 60%, rgba(255, 255, 255, 1) 100%);
-			}
-		}
-	</style>
 </head>
 
 <body class="min-h-screen bg-slate-100/70 font-sans text-slate-800 antialiased relative flex items-center justify-center p-3 sm:p-6 lg:p-8 selection:bg-emerald-500 selection:text-white">
 
 	<!-- Outer Card (Clean White, Rounded-3xl, Elevated Shadow) -->
-	<main class="relative z-10 w-full max-w-4xl my-auto bg-white rounded-3xl sm:rounded-[2.5rem] shadow-2xl shadow-slate-300/60 border border-slate-100 overflow-hidden flex flex-col lg:flex-row min-h-[520px]">
+	<main class="relative z-10 w-full max-w-4xl my-auto bg-white rounded-3xl sm:rounded-[2.5rem] shadow-2xl shadow-slate-300/60 border border-slate-100 overflow-hidden split-card">
 		
-		<!-- Left Panel: Uploaded Background with Seamless Fade-to-White (5/12 on LG) -->
-		<div class="relative w-full lg:w-5/12 bg-slate-50 p-6 sm:p-8 flex flex-col justify-between overflow-hidden min-h-[220px] lg:min-h-[520px] shrink-0">
+		<!-- Left Panel: Uploaded Background with Seamless Fade-to-White (48% width) -->
+		<div class="split-left bg-slate-50 p-6 sm:p-8 flex flex-col justify-between">
 			
 			<!-- Background Image from Admin Upload -->
 			<img src="<?= $bc_src ?>" onerror="this.onerror=null; this.src='<?= $homeurl ?>/dist/img/bc.jpg';" alt="Background" class="absolute inset-0 w-full h-full object-cover">
 			
 			<!-- Seamless Gradient Blend into the white canvas -->
-			<div class="absolute inset-0 fade-to-right pointer-events-none"></div>
+			<div class="fade-to-right"></div>
 
 			<!-- Top-Left Icon / Logo -->
 			<div class="relative z-10">
@@ -49,9 +39,9 @@ $bc_src = !empty($setting['bc']) ? "$homeurl/{$setting['bc']}" : "$homeurl/dist/
 				</div>
 			</div>
 
-			<!-- Bottom-Left School Branding (Clean, Real Info, No AI fluff) -->
+			<!-- Bottom-Left School Branding (Clean, Real Info, Matching Reference) -->
 			<div class="relative z-10 mt-auto pt-6 text-left">
-				<h1 class="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight leading-[1.15]">
+				<h1 class="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-slate-900 tracking-tight leading-[1.12]">
 					<?= htmlspecialchars($setting['sekolah']) ?>
 				</h1>
 				<p class="text-base sm:text-lg font-serif italic text-emerald-700 font-semibold mt-1">
@@ -64,11 +54,11 @@ $bc_src = !empty($setting['bc']) ? "$homeurl/{$setting['bc']}" : "$homeurl/dist/
 
 		</div>
 
-		<!-- Right Panel: Centered Clean Login Form (7/12 on LG) -->
-		<div class="w-full lg:w-7/12 p-6 sm:p-8 lg:p-12 flex flex-col justify-between bg-white relative grow">
+		<!-- Right Panel: Centered Clean Login Form (52% width) -->
+		<div class="split-right p-6 sm:p-8 lg:p-12 bg-white">
 			
 			<!-- Spacer for top balance -->
-			<div class="hidden lg:block"></div>
+			<div></div>
 
 			<!-- Centered Form Container -->
 			<div class="w-full max-w-sm mx-auto my-auto text-center py-4">
@@ -116,8 +106,8 @@ $bc_src = !empty($setting['bc']) ? "$homeurl/{$setting['bc']}" : "$homeurl/dist/
 
 					<!-- Sign In Button (Pill Rounded Emerald) -->
 					<div class="pt-2">
-						<button type="submit" id="btnSubmit" class="w-full py-3.5 px-6 rounded-full text-white font-semibold text-sm shadow-md shadow-emerald-600/25 active:scale-[0.98] transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-75 disabled:cursor-not-allowed"
-							style="background-color: #059669;">
+						<button type="submit" id="btnSubmit" class="w-full py-3.5 px-6 rounded-full text-white font-semibold text-sm shadow-md shadow-emerald-700/25 active:scale-[0.98] transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-75 disabled:cursor-not-allowed"
+							style="background-color: #007a4d;">
 							<span id="btnText">Sign In</span>
 							<svg id="btnSpinner" class="w-4 h-4 animate-spin hidden text-white" fill="none" viewBox="0 0 24 24" style="width: 16px; height: 16px;">
 								<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
@@ -198,35 +188,35 @@ $bc_src = !empty($setting['bc']) ? "$homeurl/{$setting['bc']}" : "$homeurl/dist/
 									type: 'warning',
 									title: 'Password Salah',
 									text: 'Periksa kembali password akun Anda.',
-									confirmButtonColor: '#059669'
+									confirmButtonColor: '#007a4d'
 								});
 							} else if (data === "td") {
 								swal({
 									type: 'error',
 									title: 'Tidak Terdaftar',
 									text: 'Username tidak ditemukan dalam sistem.',
-									confirmButtonColor: '#059669'
+									confirmButtonColor: '#007a4d'
 								});
 							} else if (data === "nologin") {
 								swal({
 									type: 'warning',
 									title: 'Akun Sedang Aktif',
 									text: 'Akun ini sedang aktif di perangkat lain.',
-									confirmButtonColor: '#059669'
+									confirmButtonColor: '#007a4d'
 								});
 							} else if (data === "ta") {
 								swal({
 									type: 'warning',
 									title: 'Belum Aktif',
 									text: 'Silahkan hubungi panitia untuk aktivasi akun.',
-									confirmButtonColor: '#059669'
+									confirmButtonColor: '#007a4d'
 								});
 							} else {
 								swal({
 									type: 'error',
 									title: 'Gagal Masuk',
 									text: 'Terjadi kesalahan (' + data + ').',
-									confirmButtonColor: '#059669'
+									confirmButtonColor: '#007a4d'
 								});
 							}
 						}
@@ -240,7 +230,7 @@ $bc_src = !empty($setting['bc']) ? "$homeurl/{$setting['bc']}" : "$homeurl/dist/
 							type: 'error',
 							title: 'Gangguan Jaringan',
 							text: 'Tidak dapat terhubung ke server.',
-							confirmButtonColor: '#059669'
+							confirmButtonColor: '#007a4d'
 						});
 					}
 				});

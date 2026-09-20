@@ -2,6 +2,51 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer components {
+  .split-card {
+    display: flex;
+    flex-direction: row;
+  }
+  .split-left {
+    width: 48%;
+    position: relative;
+    overflow: hidden;
+    min-height: 540px;
+  }
+  .split-right {
+    width: 52%;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    min-height: 540px;
+  }
+  @media (max-width: 960px) {
+    .split-card {
+      flex-direction: column;
+    }
+    .split-left {
+      width: 100%;
+      min-height: 240px;
+    }
+    .split-right {
+      width: 100%;
+      min-height: auto;
+    }
+  }
+  .fade-to-right {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to right, rgba(255, 255, 255, 0) 15%, rgba(255, 255, 255, 0.4) 50%, rgba(255, 255, 255, 1) 95%);
+    pointer-events: none;
+  }
+  @media (max-width: 960px) {
+    .fade-to-right {
+      background: linear-gradient(to bottom, rgba(255, 255, 255, 0) 15%, rgba(255, 255, 255, 0.5) 60%, rgba(255, 255, 255, 1) 100%);
+    }
+  }
+}
+
 @layer utilities {
   .glass-card {
     background: rgba(255, 255, 255, 0.78);
