@@ -1,8 +1,8 @@
 <?php
-require("../../config/config.default.php");
-require("../../config/config.function.php");
-require("../../config/functions.crud.php");
-require("../../config/dis.php");
+require(__DIR__ . "/../../config/config.default.php");
+require(__DIR__ . "/../../config/config.function.php");
+require(__DIR__ . "/../../config/functions.crud.php");
+require(__DIR__ . "/../../config/dis.php");
 
 (isset($_SESSION['id_pengawas'])) ? $id_pengawas = $_SESSION['id_pengawas'] : $id_pengawas = 0;
 ($id_pengawas == 0) ? header('location:index.php') : null;
@@ -23,9 +23,25 @@ if (!empty($id_kelas) && strtolower($id_kelas) !== 'semua') {
     $where_kelas = "";
 }
 
-$logo_sekolah = !empty($setting['logo']) ? $homeurl . '/' . $setting['logo'] : $homeurl . '/dist/img/tutwuri.jpg';
-$logo_almet = file_exists('../../foto/almet.png') ? $homeurl . '/foto/almet.png' : $homeurl . '/dist/img/tutwuri.jpg';
-$ttd_file = file_exists('../../dist/img/ttd.png') ? $homeurl . '/dist/img/ttd.png' : '';
+// Helper untuk menghasilkan URL gambar yang valid dan dapat di-cache oleh browser
+function card_asset_src($rel_path, $homeurl, $fallback_rel = '') {
+    $clean_path = ltrim($rel_path, '/');
+    $abs_path = __DIR__ . '/../../' . $clean_path;
+    if (file_exists($abs_path) && !is_dir($abs_path) && filesize($abs_path) > 0) {
+        return rtrim($homeurl, '/') . '/' . $clean_path;
+    }
+    if (!empty($fallback_rel)) {
+        $fallback_clean = ltrim($fallback_rel, '/');
+        return rtrim($homeurl, '/') . '/' . $fallback_clean;
+    }
+    return rtrim($homeurl, '/') . '/' . $clean_path;
+}
+
+// Aset Kop & TTD
+$logo_sekolah_src = !empty($setting['logo']) ? card_asset_src($setting['logo'], $homeurl, 'dist/img/tutwuri.jpg') : card_asset_src('dist/img/tutwuri.jpg', $homeurl);
+$logo_almet_src = file_exists(__DIR__ . '/../../foto/almet.png') ? card_asset_src('foto/almet.png', $homeurl) : card_asset_src('dist/img/tutwuri.jpg', $homeurl);
+$ttd_src = file_exists(__DIR__ . '/../../dist/img/ttd.png') ? card_asset_src('dist/img/ttd.png', $homeurl) : '';
+$default_avatar_src = card_asset_src('dist/img/avatar_default.png', $homeurl);
 ?>
 <!DOCTYPE html>
 <html lang="id">
@@ -61,7 +77,7 @@ $ttd_file = file_exists('../../dist/img/ttd.png') ? $homeurl . '/dist/img/ttd.pn
             border-spacing: 3mm 2.5mm;
             margin: 0 auto;
         }
-        /* UKURAN TETAP SETIAP KARTU (SERAGAM DAN RATA) */
+        /* UKURAN TETAP SETIAP KARTU (SERAGAM DAN RATA 100%) */
         .kartu-item {
             width: 96mm;
             height: 66mm;
@@ -226,13 +242,6 @@ $ttd_file = file_exists('../../dist/img/ttd.png') ? $homeurl . '/dist/img/ttd.pn
 </head>
 <body>
 
-<div class="no-print" style="position: fixed; top: 15px; right: 20px; z-index: 9999;">
-    <button onclick="window.print()" style="background: #16a34a; color: #fff; border: none; padding: 8px 16px; font-size: 13px; font-weight: bold; border-radius: 6px; cursor: pointer; box-shadow: 0 4px 10px rgba(0,0,0,0.2); display: flex; align-items: center; gap: 6px;">
-        <svg style="width: 16px; height: 16px;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4H7v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path></svg>
-        Cetak Kartu
-    </button>
-</div>
-
 <div class="page-sheet">
     <table class="grid-kartu">
         <tr>
@@ -242,6 +251,15 @@ $ttd_file = file_exists('../../dist/img/ttd.png') ? $homeurl . '/dist/img/ttd.pn
         while ($siswa = mysqli_fetch_array($siswaQ)) :
             $no++;
             $kelas_nama = !empty($kelas_row['nama']) ? $kelas_row['nama'] : $siswa['id_kelas'];
+            
+            // Foto Siswa
+            $foto_src = $default_avatar_src;
+            if (!empty($siswa['foto'])) {
+                $check_foto = "foto/fotosiswa/" . $siswa['foto'];
+                if (file_exists(__DIR__ . '/../../' . $check_foto)) {
+                    $foto_src = card_asset_src($check_foto, $homeurl);
+                }
+            }
         ?>
             <td style="width: 50%; vertical-align: top; padding: 0;">
                 <div class="kartu-item">
@@ -249,7 +267,7 @@ $ttd_file = file_exists('../../dist/img/ttd.png') ? $homeurl . '/dist/img/ttd.pn
                     <table class="kop-table">
                         <tr>
                             <td style="width: 40px; text-align: left; vertical-align: middle;">
-                                <img src="<?= $logo_almet ?>" class="kop-logo" onerror="this.style.visibility='hidden'">
+                                <img src="<?= $logo_almet_src ?>" class="kop-logo">
                             </td>
                             <td class="kop-text">
                                 <div class="kop-title"><?= strtoupper(!empty($setting['header_kartu']) ? $setting['header_kartu'] : 'KARTU PESERTA UJIAN') ?></div>
@@ -257,7 +275,7 @@ $ttd_file = file_exists('../../dist/img/ttd.png') ? $homeurl . '/dist/img/ttd.pn
                                 <div class="kop-sub">TAHUN PELAJARAN <?= $ajaran ?></div>
                             </td>
                             <td style="width: 40px; text-align: right; vertical-align: middle;">
-                                <img src="<?= $logo_sekolah ?>" class="kop-logo" onerror="this.style.visibility='hidden'">
+                                <img src="<?= $logo_sekolah_src ?>" class="kop-logo">
                             </td>
                         </tr>
                     </table>
@@ -266,14 +284,7 @@ $ttd_file = file_exists('../../dist/img/ttd.png') ? $homeurl . '/dist/img/ttd.pn
                     <div class="content-wrap">
                         <!-- FOTO -->
                         <div class="foto-box">
-                            <?php
-                            $foto_path = "../../foto/fotosiswa/" . $siswa['foto'];
-                            if (!empty($siswa['foto']) && file_exists($foto_path)) {
-                                echo "<img src='{$homeurl}/foto/fotosiswa/{$siswa['foto']}' class='foto-img'>";
-                            } else {
-                                echo "<img src='{$homeurl}/dist/img/avatar_default.png' class='foto-img'>";
-                            }
-                            ?>
+                            <img src="<?= $foto_src ?>" class="foto-img" onerror="this.onerror=null;this.src='<?= $default_avatar_src ?>';">
                         </div>
 
                         <!-- DATA SISWA -->
@@ -319,8 +330,8 @@ $ttd_file = file_exists('../../dist/img/ttd.png') ? $homeurl . '/dist/img/ttd.pn
                             <td style="width: 45%;"></td>
                             <td class="ttd-box">
                                 Kepala Sekolah,<br>
-                                <?php if (!empty($ttd_file)) : ?>
-                                    <img src="<?= $ttd_file ?>" class="ttd-img" onerror="this.style.display='none'">
+                                <?php if (!empty($ttd_src)) : ?>
+                                    <img src="<?= $ttd_src ?>" class="ttd-img">
                                 <?php endif; ?>
                                 <div style="height: 20px;"></div>
                                 <div class="kepsek-nama"><?= htmlspecialchars(!empty($setting['kepsek']) ? $setting['kepsek'] : 'Kepala Sekolah') ?></div>

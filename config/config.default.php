@@ -8,20 +8,18 @@ error_reporting(0);
 $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' || (isset($_SERVER['SERVER_PORT']) && $_SERVER['SERVER_PORT'] == 443)) ? "https://" : "http://";
 $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
 
-// 2. Deteksi Base Subfolder secara Dinamis (Case-Insensitive untuk Windows & SCRIPT_NAME Fallback)
-$doc_root = isset($_SERVER['DOCUMENT_ROOT']) ? rtrim(str_replace('\\', '/', $_SERVER['DOCUMENT_ROOT']), '/') : '';
-$app_root = rtrim(str_replace('\\', '/', dirname(__DIR__)), '/');
+// 2. Deteksi Base Subfolder secara Dinamis
+$script_name = str_replace('\\', '/', $_SERVER['SCRIPT_NAME'] ?? '');
 $base_path = '';
-if (!empty($doc_root) && stripos($app_root, $doc_root) === 0) {
-    $base_path = substr($app_root, strlen($doc_root));
-}
-if (empty($base_path) && isset($_SERVER['SCRIPT_NAME'])) {
-    $script_dir = rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'])), '/');
-    if (substr($script_dir, -6) === '/panel') {
-        $script_dir = substr($script_dir, 0, -6);
-    }
-    if (!empty($script_dir) && $script_dir !== '/' && $script_dir !== '.') {
-        $base_path = $script_dir;
+$panel_pos = stripos($script_name, '/panel/');
+if ($panel_pos !== false) {
+    $base_path = rtrim(substr($script_name, 0, $panel_pos), '/');
+} elseif (substr($script_name, -6) === '/panel') {
+    $base_path = rtrim(substr($script_name, 0, -6), '/');
+} else {
+    $dir = rtrim(dirname($script_name), '/');
+    if ($dir !== '/' && $dir !== '.' && $dir !== '\\' && $dir !== '') {
+        $base_path = $dir;
     }
 }
 

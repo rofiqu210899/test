@@ -14,6 +14,8 @@ if (filter_var($host_only, FILTER_VALIDATE_IP)) {
     );
 }
 
+@mysqli_report(MYSQLI_REPORT_OFF);
+
 $is_local = (
     $is_win ||
     $is_private_ip ||
@@ -22,7 +24,7 @@ $is_local = (
     substr($host_server, -5) === '.test' ||
     substr($host_server, -6) === '.local' ||
     substr($host_server, -4) === '.lan' ||
-    php_sapi_name() === 'cli'
+    ($is_win && php_sapi_name() === 'cli')
 );
 
 // Pengecualian: Hanya jika diakses via domain hosting resmi dan server bukan Windows
