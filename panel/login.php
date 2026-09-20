@@ -54,19 +54,14 @@ $bc_src = !empty($setting['bc']) ? "$homeurl/{$setting['bc']}" : "$homeurl/dist/
 				</div>
 			</div>
 
-			<!-- School Name & App Title (Clean, Authentic, No Fluff) -->
-			<div class="mb-6 space-y-1">
+			<!-- School Name & App Title (Clean, Authentic, Minimal) -->
+			<div class="mb-6 space-y-0.5">
 				<h1 class="text-xl sm:text-2xl font-bold text-white tracking-tight leading-snug">
 					<?= htmlspecialchars($namasekolah) ?>
 				</h1>
 				<p class="text-xs text-slate-400 font-medium tracking-wide">
-					<?= htmlspecialchars($namaaplikasi) ?>
+					<?= htmlspecialchars($namaaplikasi) ?> • Pengawas
 				</p>
-				<div>
-					<span class="inline-block mt-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold tracking-wider uppercase bg-indigo-500/10 border border-indigo-500/25 text-indigo-300">
-						Pengawas & Admin
-					</span>
-				</div>
 			</div>
 
 			<!-- Form Login Admin -->
@@ -132,11 +127,11 @@ $bc_src = !empty($setting['bc']) ? "$homeurl/{$setting['bc']}" : "$homeurl/dist/
 
 			<!-- Minimal Clean Footer -->
 			<div class="mt-6 pt-4 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400 font-medium">
-				<a href="<?= $homeurl ?>" class="text-slate-400 hover:text-indigo-300 transition-colors flex items-center gap-1">
-					<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
-					Portal Siswa
+				<a href="<?= $homeurl ?>" class="text-slate-400 hover:text-indigo-300 transition-colors flex items-center gap-1.5 whitespace-nowrap">
+					<svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+					<span>Portal Siswa</span>
 				</a>
-				<span>Versi <?= htmlspecialchars(VERSI . " r" . REVISI) ?></span>
+				<span class="whitespace-nowrap">Versi <?= htmlspecialchars(VERSI . " r" . REVISI) ?></span>
 			</div>
 
 		</div>
