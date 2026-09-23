@@ -317,25 +317,47 @@ function insert_questions($koneksi, $id_mapel, $questions)
 }
 
 // ---------- Buat mapel baru bila belum ada ----------
-function ensure_mapel($koneksi, $nama, $guru = '', $kelas = '', $level = '', $customKode = '')
+function ensure_mapel($koneksi, $nama, $guru = '', $kelas = '', $level = '', $customKode = '', $explicitId = 0)
 {
+    if ((int)$explicitId > 0) {
+        $q_exp = mysqli_query($koneksi, "SELECT id_mapel FROM mapel WHERE id_mapel = " . (int)$explicitId);
+        if ($q_exp && mysqli_num_rows($q_exp) > 0) {
+            return (int)$explicitId;
+        }
+    }
+
     $nama = trim($nama);
+    $customKode = trim($customKode);
+    $lvl = $level !== '' ? $level : '7';
+
+    // 1. Cek berdasarkan kode jika ada
+    if ($customKode !== '') {
+        $q_kode = mysqli_query($koneksi, "SELECT id_mapel FROM mapel WHERE kode = '" . mysqli_real_escape_string($koneksi, $customKode) . "'");
+        if ($q_kode && mysqli_num_rows($q_kode) > 0) {
+            $row = mysqli_fetch_array($q_kode);
+            return (int) $row['id_mapel'];
+        }
+    }
+
+    // 2. Cek berdasarkan nama dan level
+    if ($nama !== '') {
+        $q_lvl = mysqli_query($koneksi, "SELECT id_mapel FROM mapel WHERE nama = '" . mysqli_real_escape_string($koneksi, $nama) . "' AND level = '" . mysqli_real_escape_string($koneksi, $lvl) . "'");
+        if ($q_lvl && mysqli_num_rows($q_lvl) > 0) {
+            $row = mysqli_fetch_array($q_lvl);
+            return (int) $row['id_mapel'];
+        }
+
+        // 3. Fallback cek nama saja
+        $q = mysqli_query($koneksi, "SELECT id_mapel FROM mapel WHERE nama = '" . mysqli_real_escape_string($koneksi, $nama) . "'");
+        if ($q && mysqli_num_rows($q) > 0) {
+            $row = mysqli_fetch_array($q);
+            return (int) $row['id_mapel'];
+        }
+    }
+
     if ($nama === '') {
         api_fail('Nama mapel kosong. Kirim field "mapel".', 400);
     }
-    $customKode = trim($customKode);
-    $q = mysqli_query($koneksi, "SELECT id_mapel FROM mapel WHERE nama = '" . mysqli_real_escape_string($koneksi, $nama) . "'");
-    if ($q && mysqli_num_rows($q) > 0) {
-        $row = mysqli_fetch_array($q);
-        $id_mapel = (int) $row['id_mapel'];
-        if ($customKode !== '') {
-            mysqli_query($koneksi, "UPDATE mapel SET kode = '" . mysqli_real_escape_string($koneksi, $customKode) . "' WHERE id_mapel = $id_mapel");
-        }
-        return $id_mapel;
-    }
-    // Kolom NOT NULL wajib diisi: kode,idpk,idguru,nama,jml_soal,jml_esai,
-    // tampil_pg,tampil_esai,bobot_pg,bobot_esai,level,opsi,kelas,status
-    $lvl = $level !== '' ? $level : '7';
     if ($customKode !== '') {
         $kode = $customKode;
     } else {
@@ -388,7 +410,8 @@ switch ($action) {
         $mapelName = $_POST['mapel'] ?? '';
         $levelParam = $_POST['level'] ?? '';
         $kodeParam = $_POST['kode'] ?? '';
-        $id_mapel = ensure_mapel($koneksi, $mapelName, '', '', $levelParam, $kodeParam);
+        $idMapelParam = (int) ($_POST['id_mapel'] ?? 0);
+        $id_mapel = ensure_mapel($koneksi, $mapelName, '', '', $levelParam, $kodeParam, $idMapelParam);
         $file = $_FILES['file'];
 
         // Cek ekstensi .docx (word)
@@ -472,7 +495,8 @@ switch ($action) {
         }
         $levelParam = trim($body['level'] ?? '');
         $kodeParam = trim($body['kode'] ?? '');
-        $id_mapel = ensure_mapel($koneksi, $mapelName, '', '', $levelParam, $kodeParam);
+        $idMapelParam = (int) ($body['id_mapel'] ?? 0);
+        $id_mapel = ensure_mapel($koneksi, $mapelName, '', '', $levelParam, $kodeParam, $idMapelParam);
 
         $questions = [];
         foreach ($body['questions'] as $q) {
@@ -507,6 +531,14 @@ switch ($action) {
             $tables[] = $r[0];
         }
         api_json(['status' => 'success', 'tables' => $tables]);
+
+    case 'list_mapel':
+        $q = mysqli_query($koneksi, "SELECT id_mapel, kode, nama, level, jml_soal FROM mapel ORDER BY id_mapel DESC");
+        $rows = [];
+        while ($r = mysqli_fetch_assoc($q)) {
+            $rows[] = $r;
+        }
+        api_json(['status' => 'success', 'data' => $rows]);
 
     case 'get_soal':
         $id_mapel = isset($_GET['id_mapel']) ? (int) $_GET['id_mapel'] : 0;
